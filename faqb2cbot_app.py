@@ -36,7 +36,11 @@ chunks = splitter.split_documents(docs)
 
 # Embedding and vector DB
 embeddings = OpenAIEmbeddings()
-db = Chroma.from_documents(chunks, embedding=embeddings)
+db = Chroma.from_documents(
+    chunks,
+    embedding=embeddings,
+    persist_directory=None  # Force in-memory, ephemeral usage
+)
 retriever = db.as_retriever()
 
 # Chat memory and chain
