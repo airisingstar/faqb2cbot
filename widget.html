@@ -5,31 +5,64 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>FAQB2CBot Widget</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; }
-    .wrap { display: flex; flex-direction: column; height: 100vh; }
-    header { padding: 10px 12px; border-bottom: 1px solid #eee; font-weight: 600; }
-    #log { flex: 1; padding: 12px; overflow-y: auto; background: #fafafa; }
-    .msg { margin: 8px 0; padding: 8px 10px; border-radius: 8px; max-width: 85%; }
+    :root {
+      --bg: #ffffff;
+      --border: rgba(0,0,0,0.08);
+      --shadow: 0 8px 30px rgba(0,0,0,0.15);
+      --accent: #111827;
+      --muted: #f5f7fb;
+      --text: #111827;
+    }
+    html, body {
+      margin: 0; padding: 0; height: 100%; width: 100%;
+      background: transparent; color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    .window {
+      box-sizing: border-box;
+      display: flex; flex-direction: column;
+      height: 100%; width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 10px 12px; border-bottom:1px solid var(--border); font-weight:600;
+    }
+    header .brand { display:flex; align-items:center; gap:8px; }
+    header img { width:20px; height:20px; border-radius:4px; }
+    #log { flex:1; padding:12px; overflow-y:auto; background: var(--muted); }
+    .msg { margin: 8px 0; padding: 8px 10px; border-radius: 8px; max-width: 85%; word-wrap: break-word; }
     .user { background: #e8f0fe; align-self: flex-end; }
-    .bot  { background: #fff; border: 1px solid #eee; }
-    form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #eee; }
-    input[type=text] { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ccc; }
-    button { padding: 10px 14px; border: 0; border-radius: 8px; background: #111827; color: #fff; cursor: pointer; }
-    .small { color: #999; font-size: 12px; }
-    .error { color: #b91c1c; }
+    .bot  { background: #fff; border: 1px solid var(--border); }
+    form { display:flex; gap:8px; padding:10px; border-top:1px solid var(--border); background:#fff; }
+    input[type=text] { flex:1; padding:10px; border-radius:8px; border:1px solid #ccc; outline:none; }
+    button { padding:10px 14px; border:0; border-radius:8px; background: var(--accent); color:#fff; cursor:pointer; }
+    .small { color:#888; font-size:12px; padding:6px 12px; background:#fff; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>Virtual Assistant</header>
+  <div class="window" role="dialog" aria-label="Virtual Assistant">
+    <header>
+      <div class="brand">
+        <img src="https://www.svgrepo.com/show/530440/message-chat-circle.svg" alt="">
+        <span>Virtual Assistant</span>
+      </div>
+      <!-- (Optional) could add an "x" here if you want the iframe to send a postMessage to parent to hide -->
+    </header>
+
     <div id="log">
       <div class="msg bot">Hi! Ask me anything about services and policies.</div>
     </div>
-    <form id="chat">
-      <input id="q" type="text" placeholder="Type your question..." autocomplete="off" />
+
+    <form id="chat" autocomplete="off">
+      <input id="q" type="text" placeholder="Type your question..." />
       <button type="submit">Send</button>
     </form>
-    <div class="small" style="padding:8px 12px;">Powered by FAQB2CBot</div>
+
+    <div class="small">Powered by FAQB2CBot</div>
   </div>
 
   <script>
@@ -59,7 +92,7 @@
       log.scrollTop = log.scrollHeight;
 
       try {
-        // IMPORTANT: relative URL so it hits the same origin as the iframe host
+        // IMPORTANT: relative path → uses the same origin as the iframe host (Render)
         const res = await fetch('/ask', {
           method: 'POST',
           headers: {'content-type': 'application/json'},
