@@ -1,119 +1,61 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>FAQB2CBot Widget</title>
-  <style>
-    :root {
-      --bg: #ffffff;
-      --border: rgba(0,0,0,0.08);
-      --shadow: 0 8px 30px rgba(0,0,0,0.15);
-      --accent: #111827;
-      --muted: #f5f7fb;
-      --text: #111827;
-    }
-    html, body {
-      margin: 0; padding: 0; height: 100%; width: 100%;
-      background: transparent; color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    }
-    .window {
-      box-sizing: border-box;
-      display: flex; flex-direction: column;
-      height: 100%; width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      box-shadow: var(--shadow);
-      overflow: hidden;
-    }
-    header {
-      display:flex; align-items:center; justify-content:space-between;
-      padding: 10px 12px; border-bottom:1px solid var(--border); font-weight:600;
-    }
-    header .brand { display:flex; align-items:center; gap:8px; }
-    header img { width:20px; height:20px; border-radius:4px; }
-    #log { flex:1; padding:12px; overflow-y:auto; background: var(--muted); }
-    .msg { margin: 8px 0; padding: 8px 10px; border-radius: 8px; max-width: 85%; word-wrap: break-word; }
-    .user { background: #e8f0fe; align-self: flex-end; }
-    .bot  { background: #fff; border: 1px solid var(--border); }
-    form { display:flex; gap:8px; padding:10px; border-top:1px solid var(--border); background:#fff; }
-    input[type=text] { flex:1; padding:10px; border-radius:8px; border:1px solid #ccc; outline:none; }
-    button { padding:10px 14px; border:0; border-radius:8px; background: var(--accent); color:#fff; cursor:pointer; }
-    .small { color:#888; font-size:12px; padding:6px 12px; background:#fff; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MyAiToolset Chatbot</title>
+<style>
+  body { font-family: Inter, sans-serif; margin: 0; background: #f3f4f6; }
+  .chat-box { width: 400px; height: 600px; border-radius: 16px; box-shadow: 0 0 15px rgba(0,0,0,0.1); background: white; display: flex; flex-direction: column; overflow: hidden; margin: 40px auto; }
+  .header { background: linear-gradient(135deg,#0f172a,#1e293b); color: white; padding: 16px; text-align: center; font-weight: 600; }
+  .messages { flex: 1; overflow-y: auto; padding: 16px; }
+  .input-area { display: flex; padding: 10px; border-top: 1px solid #ddd; }
+  input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ccc; }
+  button { margin-left: 8px; background: #3B82F6; color: white; border: none; border-radius: 8px; padding: 10px 18px; font-weight: 600; cursor: pointer; }
+  .bot, .user { margin: 10px 0; }
+  .bot { text-align: left; }
+  .user { text-align: right; color: #3B82F6; }
+</style>
 </head>
 <body>
-  <div class="window" role="dialog" aria-label="Virtual Assistant">
-    <header>
-      <div class="brand">
-        <img src="https://www.svgrepo.com/show/530440/message-chat-circle.svg" alt="">
-        <span>Virtual Assistant</span>
-      </div>
-      <!-- (Optional) could add an "x" here if you want the iframe to send a postMessage to parent to hide -->
-    </header>
-
-    <div id="log">
-      <div class="msg bot">Hi! Ask me anything about services and policies.</div>
-    </div>
-
-    <form id="chat" autocomplete="off">
-      <input id="q" type="text" placeholder="Type your question..." />
-      <button type="submit">Send</button>
-    </form>
-
-    <div class="small">Powered by FAQB2CBot</div>
+<div class="chat-box">
+  <div class="header">🤖 MyAiToolset Assistant</div>
+  <div class="messages" id="messages">
+    <div class="bot">Hi there! 👋 I'm your AI assistant. How can I help you today?</div>
   </div>
+  <div class="input-area">
+    <input id="userInput" placeholder="Ask a question..." />
+    <button onclick="sendMessage()">Send</button>
+  </div>
+</div>
 
-  <script>
-    const form = document.getElementById('chat');
-    const input = document.getElementById('q');
-    const log = document.getElementById('log');
+<script>
+const API_BASE = window.location.origin;
 
-    function addMsg(text, cls='bot') {
-      const div = document.createElement('div');
-      div.className = `msg ${cls}`;
-      div.textContent = text;
-      log.appendChild(div);
-      log.scrollTop = log.scrollHeight;
-    }
+async function sendMessage() {
+  const input = document.getElementById('userInput');
+  const text = input.value.trim();
+  if (!text) return;
+  appendMessage('user', text);
+  input.value = '';
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const question = (input.value || '').trim();
-      if (!question) return;
+  appendMessage('bot', '...');
+  const res = await fetch(`${API_BASE}/ask`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ question: text })
+  });
+  const data = await res.json();
+  document.querySelector('.bot:last-child').innerHTML = data.answer;
+}
 
-      addMsg(question, 'user');
-      input.value = '';
-      const typing = document.createElement('div');
-      typing.className = 'msg bot';
-      typing.textContent = '…';
-      log.appendChild(typing);
-      log.scrollTop = log.scrollHeight;
-
-      try {
-        // IMPORTANT: relative path → uses the same origin as the iframe host (Render)
-        const res = await fetch('/ask', {
-          method: 'POST',
-          headers: {'content-type': 'application/json'},
-          body: JSON.stringify({ question })
-        });
-
-        if (!res.ok) {
-          const text = await res.text();
-          typing.remove();
-          addMsg(`Error ${res.status}: ${text}`, 'bot');
-          return;
-        }
-
-        const data = await res.json();
-        typing.remove();
-        addMsg(data.answer || '(no answer)', 'bot');
-      } catch (err) {
-        typing.remove();
-        addMsg('Network error: ' + (err?.message || err), 'bot');
-      }
-    });
-  </script>
+function appendMessage(sender, text) {
+  const msg = document.createElement('div');
+  msg.className = sender;
+  msg.textContent = text;
+  document.getElementById('messages').appendChild(msg);
+  document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+}
+</script>
 </body>
 </html>

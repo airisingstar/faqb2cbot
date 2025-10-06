@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Form
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,24 +9,27 @@ from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
 from langchain.chains import RetrievalQA
-import os, threading, logging, platform, json, time
+import os, threading, logging, platform, json, time, smtplib
+from email.mime.text import MIMEText
 
 # ---------- Logging ----------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("faqb2cbot")
 
 # ---------- Config ----------
-load_dotenv()  # local only; on Render use env vars
+load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ALLOW_ORIGINS = os.getenv("ALLOW_ORIGINS", "*")
 INDEX_DIR = os.getenv("INDEX_DIR", "faiss_index")
 FAQ_FILE = os.getenv("FAQ_FILE", "faq.txt")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # adjust if needed
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+BOOKING_URL = os.getenv("BOOKING_URL", "https://calendly.com/myaitoolset/15min")
+EMAIL_TO = os.getenv("EMAIL_TO", "info@myaitoolset.com")
 
 allow_origins_list = ["*"] if ALLOW_ORIGINS.strip() == "*" else [o.strip() for o in ALLOW_ORIGINS.split(",") if o.strip()]
 
 # ---------- App ----------
-app = FastAPI(title="FAQB2CBot")
+app = FastAPI(title="MyAiToolset Chatbot")
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,16 +39,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static + widget
 app.mount("/static", StaticFiles(directory="."), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return HTMLResponse("<h3>FAQB2CBot is live</h3><p>Try <code>/widget.html</code>, <code>/healthz</code>, <code>/readyz</code>, <code>/diag</code></p>")
-
-@app.head("/")
-async def head_root():
-    return Response(status_code=200)
+    return HTMLResponse("<h3>MyAiToolset Chatbot is live</h3><p>Try <code>/widget.html</code>, <code>/healthz</code>, or <code>/diag</code></p>")
 
 @app.get("/favicon.ico")
 async def favicon():
@@ -62,17 +60,9 @@ async def get_widget():
 async def healthz():
     return {"ok": True, "ts": time.time()}
 
-@app.head("/healthz")
-async def head_healthz():
-    return Response(status_code=200)
-
 @app.get("/readyz")
 async def readyz():
     return {"ready": bool(getattr(app.state, "ready", False))}
-
-@app.head("/readyz")
-async def head_readyz():
-    return Response(status_code=200)
 
 @app.get("/diag")
 async def diag():
@@ -84,16 +74,9 @@ async def diag():
             "INDEX_DIR": INDEX_DIR,
             "FAQ_FILE": FAQ_FILE,
             "OPENAI_MODEL": OPENAI_MODEL,
-            "OPENAI_API_KEY_set": bool(OPENAI_API_KEY),
-        },
-        "files": {
-            "faq_exists": os.path.exists(FAQ_FILE),
-            "index_dir_exists": os.path.isdir(INDEX_DIR),
-            "widget_exists": os.path.exists("widget.html"),
         },
         "state": {
             "ready": bool(getattr(app.state, "ready", False)),
-            "pipeline_built": app.state.__dict__.get("pipeline") is not None,
         }
     }
     return JSONResponse(info)
@@ -106,26 +89,19 @@ app.state.lock = threading.Lock()
 def build_or_load_pipeline():
     log.info("Pipeline init: starting")
     try:
-        if not OPENAI_API_KEY:
-            log.warning("OPENAI_API_KEY is not set. LLM will fail.")
         embeddings = OpenAIEmbeddings()
-
-        # Load FAISS from disk if present
         vectorstore = None
         if os.path.isdir(INDEX_DIR):
-            log.info(f"Trying to load FAISS index from {INDEX_DIR}")
             try:
                 vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
                 log.info("Loaded FAISS index from disk")
             except Exception as e:
-                log.warning(f"Failed loading FAISS from disk: {e}")
+                log.warning(f"Failed loading FAISS: {e}")
                 vectorstore = None
 
-        # Otherwise build from faq.txt
         if vectorstore is None:
             if not os.path.exists(FAQ_FILE):
                 raise FileNotFoundError(f"{FAQ_FILE} not found")
-            log.info(f"Building FAISS from {FAQ_FILE}")
             loader = TextLoader(FAQ_FILE, encoding="utf-8")
             docs = loader.load()
             splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
@@ -133,7 +109,6 @@ def build_or_load_pipeline():
             vectorstore = FAISS.from_documents(chunks, embeddings)
             os.makedirs(INDEX_DIR, exist_ok=True)
             vectorstore.save_local(INDEX_DIR)
-            log.info(f"Saved FAISS index to {INDEX_DIR}")
 
         llm = ChatOpenAI(temperature=0, model=OPENAI_MODEL)
         qa = RetrievalQA.from_chain_type(
@@ -145,12 +120,9 @@ def build_or_load_pipeline():
 
         app.state.pipeline = {"qa": qa}
         app.state.ready = True
-        log.info("Pipeline init: success; ready=True")
-
+        log.info("Pipeline ready")
     except Exception as e:
-        app.state.pipeline = None
-        app.state.ready = False
-        log.exception(f"Pipeline init: FAILED: {e}")
+        log.exception(f"Pipeline init failed: {e}")
 
 def ensure_pipeline():
     if app.state.pipeline is None:
@@ -170,19 +142,53 @@ class Question(BaseModel):
 async def ask(q: Question):
     ensure_pipeline()
     if not app.state.ready:
-        raise HTTPException(status_code=503, detail="Warming up or failed to init; check /diag")
+        raise HTTPException(status_code=503, detail="Initializing, try again soon")
 
-    query = (q.question or "").strip()
-    if not query:
-        raise HTTPException(status_code=400, detail="Empty question")
-
+    query = (q.question or "").strip().lower()
     qa = app.state.pipeline["qa"]
+
+    # Booking and lead detection
+    if any(word in query for word in ["book", "appointment", "schedule", "meeting"]):
+        return JSONResponse({
+            "answer": f"You can easily book a call here: <a href='{BOOKING_URL}' target='_blank'>{BOOKING_URL}</a>"
+        })
+
+    if any(word in query for word in ["contact", "email", "reach", "call you", "talk to someone"]):
+        return JSONResponse({
+            "answer": f"You can contact us anytime at <a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>."
+        })
+
     try:
         result = qa.invoke({"query": query})
-        # RetrievalQA returns dict with 'result'
         answer = result["result"] if isinstance(result, dict) and "result" in result else result
         return JSONResponse({"answer": answer})
     except Exception as e:
         log.exception(f"/ask failed: {e}")
         raise HTTPException(status_code=500, detail="LLM error")
 
+# ---------- Lead Capture ----------
+@app.post("/lead")
+async def capture_lead(name: str = Form(...), email: str = Form(...), message: str = Form("")):
+    lead = {
+        "name": name,
+        "email": email,
+        "message": message,
+        "timestamp": time.time()
+    }
+    os.makedirs("leads", exist_ok=True)
+    with open(f"leads/{int(time.time())}.json", "w") as f:
+        json.dump(lead, f, indent=2)
+
+    # Try email notify
+    try:
+        body = f"New lead captured:\n\nName: {name}\nEmail: {email}\nMessage: {message}"
+        msg = MIMEText(body)
+        msg["Subject"] = "New Lead - MyAiToolset"
+        msg["From"] = EMAIL_TO
+        msg["To"] = EMAIL_TO
+        with smtplib.SMTP("localhost") as s:
+            s.send_message(msg)
+    except Exception as e:
+        log.warning(f"Email notification failed: {e}")
+
+    return JSONResponse({"ok": True, "saved": True})
