@@ -1,78 +1,61 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <!-- Prevent iOS input zoom -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>MyAiToolset Widget</title>
-  <style>
-    /* iOS: don’t auto-resize text; keep inputs >=16px to prevent zoom */
-    html, body { -webkit-text-size-adjust: 100%; }
-    input, textarea, select, button { font-size: 16px !important; line-height: 1.4; }
-
-    /* Nice mobile sizing for the whole widget */
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
-      background:#fff;
-      color:#0f172a;
-    }
-    .chat-shell {
-      display:flex; flex-direction:column; height:100vh; /* fills iframe */
-      box-sizing:border-box;
-    }
-    .chat-header {
-      padding:10px 14px; background:#0f172a; color:#fff; font-weight:600;
-    }
-    .chat-body {
-      flex:1; overflow:auto; padding:12px;
-      background:#f8fafc;
-    }
-    .chat-input {
-      display:flex; gap:8px; padding:12px; border-top:1px solid #e5e7eb; background:#fff;
-    }
-    .chat-input input[type="text"]{
-      flex:1; padding:12px 14px; border:1px solid #cbd5e1; border-radius:10px;
-      /* critical for iOS no-zoom */
-      font-size:16px !important;
-    }
-    .chat-input button{
-      padding:12px 16px; border:none; border-radius:10px; background:#3B82F6; color:#fff; font-weight:700;
-      font-size:16px !important;
-    }
-
-    /* Optional: hide any “Powered by …” footer in your widget */
-    .powered-by, footer.powered { display:none !important; height:0 !important; visibility:hidden !important; }
-    
-    /* iPhone safe areas */
-    @supports (padding: max(0px)) {
-      .chat-input { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-      .chat-header { padding-top:  max(10px, env(safe-area-inset-top)); }
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MyAiToolset Chatbot</title>
+<style>
+  body { font-family: Inter, sans-serif; margin: 0; background: #f3f4f6; }
+  .chat-box { width: 400px; height: 600px; border-radius: 16px; box-shadow: 0 0 15px rgba(0,0,0,0.1); background: white; display: flex; flex-direction: column; overflow: hidden; margin: 40px auto; }
+  .header { background: linear-gradient(135deg,#0f172a,#1e293b); color: white; padding: 16px; text-align: center; font-weight: 600; }
+  .messages { flex: 1; overflow-y: auto; padding: 16px; }
+  .input-area { display: flex; padding: 10px; border-top: 1px solid #ddd; }
+  input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ccc; }
+  button { margin-left: 8px; background: #3B82F6; color: white; border: none; border-radius: 8px; padding: 10px 18px; font-weight: 600; cursor: pointer; }
+  .bot, .user { margin: 10px 0; }
+  .bot { text-align: left; }
+  .user { text-align: right; color: #3B82F6; }
+</style>
 </head>
 <body>
-  <div class="chat-shell">
-    <div class="chat-header">Virtual Assistant</div>
-
-    <div class="chat-body" id="messages">
-      <!-- your messages render here -->
-    </div>
-
-    <form class="chat-input" id="chat-form">
-      <input id="q" type="text" placeholder="Type your question…" autocomplete="off" />
-      <button type="submit">Send</button>
-    </form>
+<div class="chat-box">
+  <div class="header">🤖 MyAiToolset Assistant</div>
+  <div class="messages" id="messages">
+    <div class="bot">Hi there! 👋 I'm your AI assistant. How can I help you today?</div>
   </div>
+  <div class="input-area">
+    <input id="userInput" placeholder="Ask a question..." />
+    <button onclick="sendMessage()">Send</button>
+  </div>
+</div>
 
-  <script>
-    // your existing JS to call /ask etc.
-    const form = document.getElementById('chat-form');
-    const q = document.getElementById('q');
-    form.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      // ... send to your /ask endpoint and render responses ...
-    });
-  </script>
+<script>
+const API_BASE = window.location.origin;
+
+async function sendMessage() {
+  const input = document.getElementById('userInput');
+  const text = input.value.trim();
+  if (!text) return;
+  appendMessage('user', text);
+  input.value = '';
+
+  appendMessage('bot', '...');
+  const res = await fetch(`${API_BASE}/ask`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ question: text })
+  });
+  const data = await res.json();
+  document.querySelector('.bot:last-child').innerHTML = data.answer;
+}
+
+function appendMessage(sender, text) {
+  const msg = document.createElement('div');
+  msg.className = sender;
+  msg.textContent = text;
+  document.getElementById('messages').appendChild(msg);
+  document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+}
+</script>
 </body>
 </html>
