@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Response, Form
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +26,9 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 BOOKING_URL = os.getenv("BOOKING_URL", "https://calendly.com/myaitoolset/15min")
 EMAIL_TO = os.getenv("EMAIL_TO", "info@myaitoolset.com")
 
-allow_origins_list = ["*"] if ALLOW_ORIGINS.strip() == "*" else [o.strip() for o in ALLOW_ORIGINS.split(",") if o.strip()]
+allow_origins_list = ["*"] if ALLOW_ORIGINS.strip() == "*" else [
+    o.strip() for o in ALLOW_ORIGINS.split(",") if o.strip()
+]
 
 # ---------- App ----------
 app = FastAPI(title="MyAiToolset Chatbot")
@@ -39,11 +41,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# serve widget.html and any assets from repo root
 app.mount("/static", StaticFiles(directory="."), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return HTMLResponse("<h3>MyAiToolset Chatbot is live</h3><p>Try <code>/widget.html</code>, <code>/healthz</code>, or <code>/diag</code></p>")
+    return HTMLResponse(
+        "<h3>MyAiToolset Chatbot is live</h3>"
+        "<p>Try <code>/widget.html</code>, <code>/healthz</code>, or <code>/diag</code></p>"
+    )
 
 @app.get("/favicon.ico")
 async def favicon():
@@ -74,6 +80,12 @@ async def diag():
             "INDEX_DIR": INDEX_DIR,
             "FAQ_FILE": FAQ_FILE,
             "OPENAI_MODEL": OPENAI_MODEL,
+            "OPENAI_API_KEY_set": bool(OPENAI_API_KEY),
+        },
+        "files": {
+            "faq_exists": os.path.exists(FAQ_FILE),
+            "index_dir_exists": os.path.isdir(INDEX_DIR),
+            "widget_exists": os.path.exists("widget.html"),
         },
         "state": {
             "ready": bool(getattr(app.state, "ready", False)),
@@ -89,11 +101,18 @@ app.state.lock = threading.Lock()
 def build_or_load_pipeline():
     log.info("Pipeline init: starting")
     try:
+        if not OPENAI_API_KEY:
+            log.warning("OPENAI_API_KEY missing; pipeline will not be ready.")
+            return
+
         embeddings = OpenAIEmbeddings()
         vectorstore = None
+
         if os.path.isdir(INDEX_DIR):
             try:
-                vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
+                vectorstore = FAISS.load_local(
+                    INDEX_DIR, embeddings, allow_dangerous_deserialization=True
+                )
                 log.info("Loaded FAISS index from disk")
             except Exception as e:
                 log.warning(f"Failed loading FAISS: {e}")
@@ -102,6 +121,7 @@ def build_or_load_pipeline():
         if vectorstore is None:
             if not os.path.exists(FAQ_FILE):
                 raise FileNotFoundError(f"{FAQ_FILE} not found")
+            log.info("Building FAISS from faq.txt")
             loader = TextLoader(FAQ_FILE, encoding="utf-8")
             docs = loader.load()
             splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
@@ -109,6 +129,7 @@ def build_or_load_pipeline():
             vectorstore = FAISS.from_documents(chunks, embeddings)
             os.makedirs(INDEX_DIR, exist_ok=True)
             vectorstore.save_local(INDEX_DIR)
+            log.info(f"Saved FAISS index to {INDEX_DIR}")
 
         llm = ChatOpenAI(temperature=0, model=OPENAI_MODEL)
         qa = RetrievalQA.from_chain_type(
@@ -117,12 +138,13 @@ def build_or_load_pipeline():
             retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
             return_source_documents=False,
         )
-
         app.state.pipeline = {"qa": qa}
         app.state.ready = True
-        log.info("Pipeline ready")
+        log.info("Pipeline init: success; ready=True")
     except Exception as e:
         log.exception(f"Pipeline init failed: {e}")
+        app.state.ready = False
+        app.state.pipeline = None
 
 def ensure_pipeline():
     if app.state.pipeline is None:
@@ -144,44 +166,67 @@ async def ask(q: Question):
     if not app.state.ready:
         raise HTTPException(status_code=503, detail="Initializing, try again soon")
 
-    query = (q.question or "").strip().lower()
+    query_raw = (q.question or "").strip()
+    query = query_raw.lower()
+
+    # Booking / contact shortcuts
+    if any(w in query for w in ["book", "appointment", "schedule", "meeting"]):
+        return JSONResponse({
+            "answer": f"You can easily book a call here: "
+                      f"<a href='{BOOKING_URL}' target='_blank' rel='noopener'>{BOOKING_URL}</a>"
+        })
+
+    if any(w in query for w in ["contact", "email", "reach", "call you", "talk to someone"]):
+        return JSONResponse({
+            "answer": f"You can contact us anytime at "
+                      f"<a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>."
+        })
+
+    # FAQ / RAG
     qa = app.state.pipeline["qa"]
-
-    # Booking and lead detection
-    if any(word in query for word in ["book", "appointment", "schedule", "meeting"]):
-        return JSONResponse({
-            "answer": f"You can easily book a call here: <a href='{BOOKING_URL}' target='_blank'>{BOOKING_URL}</a>"
-        })
-
-    if any(word in query for word in ["contact", "email", "reach", "call you", "talk to someone"]):
-        return JSONResponse({
-            "answer": f"You can contact us anytime at <a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>."
-        })
-
     try:
-        result = qa.invoke({"query": query})
+        result = qa.invoke({"query": query_raw})
         answer = result["result"] if isinstance(result, dict) and "result" in result else result
         return JSONResponse({"answer": answer})
     except Exception as e:
         log.exception(f"/ask failed: {e}")
         raise HTTPException(status_code=500, detail="LLM error")
 
-# ---------- Lead Capture ----------
+# ---------- Lead Capture (JSON, no python-multipart needed) ----------
+class LeadIn(BaseModel):
+    name: str
+    email: str | None = None
+    phone: str | None = None
+    preferred_time: str | None = None
+    message: str | None = None
+    site: str | None = None
+
 @app.post("/lead")
-async def capture_lead(name: str = Form(...), email: str = Form(...), message: str = Form("")):
-    lead = {
-        "name": name,
-        "email": email,
-        "message": message,
-        "timestamp": time.time()
+async def capture_lead(lead: LeadIn):
+    data = {
+        "name": lead.name,
+        "email": lead.email or "",
+        "phone": lead.phone or "",
+        "preferred_time": lead.preferred_time or "",
+        "message": lead.message or "",
+        "site": lead.site or "",
+        "timestamp": time.time(),
     }
     os.makedirs("leads", exist_ok=True)
-    with open(f"leads/{int(time.time())}.json", "w") as f:
-        json.dump(lead, f, indent=2)
+    with open(f"leads/{int(time.time())}.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
-    # Try email notify
+    # Try email via local SMTP (will no-op on Render unless you configure SMTP)
     try:
-        body = f"New lead captured:\n\nName: {name}\nEmail: {email}\nMessage: {message}"
+        body = (
+            "New lead captured:\n\n"
+            f"Name: {data['name']}\n"
+            f"Email: {data['email']}\n"
+            f"Phone: {data['phone']}\n"
+            f"Preferred time: {data['preferred_time']}\n"
+            f"Message: {data['message']}\n"
+            f"Site: {data['site']}\n"
+        )
         msg = MIMEText(body)
         msg["Subject"] = "New Lead - MyAiToolset"
         msg["From"] = EMAIL_TO
@@ -189,6 +234,6 @@ async def capture_lead(name: str = Form(...), email: str = Form(...), message: s
         with smtplib.SMTP("localhost") as s:
             s.send_message(msg)
     except Exception as e:
-        log.warning(f"Email notification failed: {e}")
+        log.warning(f"Email notification failed (as expected without SMTP): {e}")
 
     return JSONResponse({"ok": True, "saved": True})
