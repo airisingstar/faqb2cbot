@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+# faqb2cbot_app.py
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -81,6 +82,7 @@ async def diag():
             "FAQ_FILE": FAQ_FILE,
             "OPENAI_MODEL": OPENAI_MODEL,
             "OPENAI_API_KEY_set": bool(OPENAI_API_KEY),
+            "RENDER_GIT_COMMIT": os.getenv("RENDER_GIT_COMMIT", ""),
         },
         "files": {
             "faq_exists": os.path.exists(FAQ_FILE),
@@ -89,6 +91,7 @@ async def diag():
         },
         "state": {
             "ready": bool(getattr(app.state, "ready", False)),
+            "pipeline_built": app.state.__dict__.get("pipeline") is not None,
         }
     }
     return JSONResponse(info)
@@ -102,12 +105,13 @@ def build_or_load_pipeline():
     log.info("Pipeline init: starting")
     try:
         if not OPENAI_API_KEY:
-            log.warning("OPENAI_API_KEY missing; pipeline will not be ready.")
+            log.warning("OPENAI_API_KEY missing; skipping pipeline init.")
             return
 
         embeddings = OpenAIEmbeddings()
         vectorstore = None
 
+        # Try load existing FAISS index
         if os.path.isdir(INDEX_DIR):
             try:
                 vectorstore = FAISS.load_local(
@@ -118,6 +122,7 @@ def build_or_load_pipeline():
                 log.warning(f"Failed loading FAISS: {e}")
                 vectorstore = None
 
+        # Otherwise build from FAQ_FILE
         if vectorstore is None:
             if not os.path.exists(FAQ_FILE):
                 raise FileNotFoundError(f"{FAQ_FILE} not found")
@@ -172,14 +177,20 @@ async def ask(q: Question):
     # Booking / contact shortcuts
     if any(w in query for w in ["book", "appointment", "schedule", "meeting"]):
         return JSONResponse({
-            "answer": f"You can easily book a call here: "
-                      f"<a href='{BOOKING_URL}' target='_blank' rel='noopener'>{BOOKING_URL}</a>"
+            "answer": (
+                "You can easily book a call here: "
+                f"<a href='{BOOKING_URL}' target='_blank' rel='noopener'>{BOOKING_URL}</a>"
+            ),
+            "type": "system"
         })
 
     if any(w in query for w in ["contact", "email", "reach", "call you", "talk to someone"]):
         return JSONResponse({
-            "answer": f"You can contact us anytime at "
-                      f"<a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>."
+            "answer": (
+                "You can contact us anytime at "
+                f"<a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>."
+            ),
+            "type": "system"
         })
 
     # FAQ / RAG
@@ -192,40 +203,70 @@ async def ask(q: Question):
         log.exception(f"/ask failed: {e}")
         raise HTTPException(status_code=500, detail="LLM error")
 
-# ---------- Lead Capture (JSON, no python-multipart needed) ----------
-class LeadIn(BaseModel):
-    name: str
-    email: str | None = None
-    phone: str | None = None
-    preferred_time: str | None = None
-    message: str | None = None
-    site: str | None = None
-
+# ---------- Lead Capture (accept JSON or form) ----------
 @app.post("/lead")
-async def capture_lead(lead: LeadIn):
-    data = {
-        "name": lead.name,
-        "email": lead.email or "",
-        "phone": lead.phone or "",
-        "preferred_time": lead.preferred_time or "",
-        "message": lead.message or "",
-        "site": lead.site or "",
+async def capture_lead(request: Request):
+    """
+    Accepts:
+      - JSON: { name, email?, phone?, preferred_time?, message?, site? }
+      - form-encoded or multipart: same field names
+    """
+    data = {}
+    ctype = request.headers.get("content-type", "").lower()
+    try:
+        if "application/json" in ctype:
+            data = await request.json()
+        elif "application/x-www-form-urlencoded" in ctype or "multipart/form-data" in ctype:
+            form = await request.form()
+            data = dict(form)
+        else:
+            # Try JSON then form as fallback
+            try:
+                data = await request.json()
+            except Exception:
+                try:
+                    form = await request.form()
+                    data = dict(form)
+                except Exception:
+                    data = {}
+    except Exception as e:
+        log.warning(f"/lead parse failed: {e}")
+        data = {}
+
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    phone = (data.get("phone") or "").strip()
+    preferred_time = (data.get("preferred_time") or "").strip()
+    message = (data.get("message") or "").strip()
+    site = (data.get("site") or "").strip()
+
+    if not name:
+        return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
+
+    payload = {
+        "name": name,
+        "email": email,
+        "phone": phone,
+        "preferred_time": preferred_time,
+        "message": message,
+        "site": site,
         "timestamp": time.time(),
     }
+
     os.makedirs("leads", exist_ok=True)
     with open(f"leads/{int(time.time())}.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        json.dump(payload, f, indent=2)
 
-    # Try email via local SMTP (will no-op on Render unless you configure SMTP)
+    # Best-effort email (Render won't have local SMTP unless configured)
     try:
         body = (
             "New lead captured:\n\n"
-            f"Name: {data['name']}\n"
-            f"Email: {data['email']}\n"
-            f"Phone: {data['phone']}\n"
-            f"Preferred time: {data['preferred_time']}\n"
-            f"Message: {data['message']}\n"
-            f"Site: {data['site']}\n"
+            f"Name: {name}\n"
+            f"Email: {email}\n"
+            f"Phone: {phone}\n"
+            f"Preferred time: {preferred_time}\n"
+            f"Message: {message}\n"
+            f"Site: {site}\n"
         )
         msg = MIMEText(body)
         msg["Subject"] = "New Lead - MyAiToolset"
@@ -234,6 +275,6 @@ async def capture_lead(lead: LeadIn):
         with smtplib.SMTP("localhost") as s:
             s.send_message(msg)
     except Exception as e:
-        log.warning(f"Email notification failed (as expected without SMTP): {e}")
+        log.warning(f"Email notification failed (expected if SMTP not configured): {e}")
 
     return JSONResponse({"ok": True, "saved": True})
