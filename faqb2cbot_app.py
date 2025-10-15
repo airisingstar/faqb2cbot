@@ -10,8 +10,7 @@ from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
 from langchain.chains import RetrievalQA
-import os, threading, logging, platform, json, time, smtplib
-from email.mime.text import MIMEText
+import os, threading, logging, platform, json, time, requests
 
 # ---------- Logging ----------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -24,8 +23,9 @@ ALLOW_ORIGINS = os.getenv("ALLOW_ORIGINS", "*")
 INDEX_DIR = os.getenv("INDEX_DIR", "faiss_index")
 FAQ_FILE = os.getenv("FAQ_FILE", "faq.txt")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-BOOKING_URL = os.getenv("BOOKING_URL", "https://formspree.io/f/your_form_id")  # your Formspree link
+BOOKING_URL = os.getenv("BOOKING_URL", "https://calendly.com/myaitoolset/15min")
 EMAIL_TO = os.getenv("EMAIL_TO", "info@myaitoolset.com")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 
 allow_origins_list = ["*"] if ALLOW_ORIGINS.strip() == "*" else [
     o.strip() for o in ALLOW_ORIGINS.split(",") if o.strip()
@@ -42,10 +42,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve widget.html and assets
 app.mount("/static", StaticFiles(directory="."), name="static")
 
 
-# ---------- Routes ----------
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return HTMLResponse(
@@ -53,9 +53,11 @@ async def root():
         "<p>Try <code>/widget.html</code>, <code>/healthz</code>, or <code>/diag</code></p>"
     )
 
+
 @app.get("/favicon.ico")
 async def favicon():
     return HTMLResponse(content="", status_code=204)
+
 
 @app.get("/widget.html", response_class=HTMLResponse)
 async def get_widget():
@@ -64,13 +66,16 @@ async def get_widget():
         return PlainTextResponse("widget.html not found", status_code=404)
     return FileResponse(path)
 
+
 @app.get("/healthz")
 async def healthz():
     return {"ok": True, "ts": time.time()}
 
+
 @app.get("/readyz")
 async def readyz():
     return {"ready": bool(getattr(app.state, "ready", False))}
+
 
 @app.get("/diag")
 async def diag():
@@ -83,6 +88,8 @@ async def diag():
             "FAQ_FILE": FAQ_FILE,
             "OPENAI_MODEL": OPENAI_MODEL,
             "OPENAI_API_KEY_set": bool(OPENAI_API_KEY),
+            "SENDGRID_API_KEY_set": bool(SENDGRID_API_KEY),
+            "EMAIL_TO": EMAIL_TO,
         },
         "files": {
             "faq_exists": os.path.exists(FAQ_FILE),
@@ -102,8 +109,8 @@ app.state.ready = False
 app.state.pipeline = None
 app.state.lock = threading.Lock()
 
+
 def build_or_load_pipeline():
-    """Builds or reloads FAISS index. Auto-rebuilds if faq.txt is newer than existing index."""
     log.info("Pipeline init: starting")
     try:
         if not OPENAI_API_KEY:
@@ -113,18 +120,22 @@ def build_or_load_pipeline():
         embeddings = OpenAIEmbeddings()
         vectorstore = None
 
-        rebuild = True
+        # Try load existing FAISS index
         if os.path.isdir(INDEX_DIR):
             try:
-                idx_time = os.path.getmtime(INDEX_DIR)
-                faq_time = os.path.getmtime(FAQ_FILE)
-                if idx_time > faq_time:
-                    rebuild = False
-            except Exception:
-                rebuild = True
+                vectorstore = FAISS.load_local(
+                    INDEX_DIR, embeddings, allow_dangerous_deserialization=True
+                )
+                log.info("Loaded FAISS index from disk")
+            except Exception as e:
+                log.warning(f"Failed loading FAISS: {e}")
+                vectorstore = None
 
-        if rebuild:
-            log.info("Rebuilding FAISS index from faq.txt")
+        # Build new index from FAQ file if needed
+        if vectorstore is None:
+            if not os.path.exists(FAQ_FILE):
+                raise FileNotFoundError(f"{FAQ_FILE} not found")
+            log.info("Building FAISS index from faq.txt")
             loader = TextLoader(FAQ_FILE, encoding="utf-8")
             docs = loader.load()
             splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
@@ -133,11 +144,6 @@ def build_or_load_pipeline():
             os.makedirs(INDEX_DIR, exist_ok=True)
             vectorstore.save_local(INDEX_DIR)
             log.info(f"Saved FAISS index to {INDEX_DIR}")
-        else:
-            log.info("FAQ unchanged — loading existing FAISS index")
-            vectorstore = FAISS.load_local(
-                INDEX_DIR, embeddings, allow_dangerous_deserialization=True
-            )
 
         llm = ChatOpenAI(temperature=0, model=OPENAI_MODEL)
         qa = RetrievalQA.from_chain_type(
@@ -148,8 +154,7 @@ def build_or_load_pipeline():
         )
         app.state.pipeline = {"qa": qa}
         app.state.ready = True
-        log.info("Pipeline init: success; ready=True")
-
+        log.info("Pipeline ready")
     except Exception as e:
         log.exception(f"Pipeline init failed: {e}")
         app.state.ready = False
@@ -161,6 +166,7 @@ def ensure_pipeline():
         with app.state.lock:
             if app.state.pipeline is None:
                 build_or_load_pipeline()
+
 
 @app.on_event("startup")
 def warm_in_background():
@@ -181,58 +187,60 @@ async def ask(q: Question):
     query_raw = (q.question or "").strip()
     query = query_raw.lower()
 
-    # Appointment / booking shortcuts
-    if any(w in query for w in ["book", "appointment", "schedule", "consult", "reserve"]):
+    # Booking shortcut
+    if any(w in query for w in ["book", "appointment", "schedule", "consult", "meeting"]):
         return JSONResponse({
             "answer": (
-                f"You can easily schedule an appointment here: "
+                f"You can easily schedule your appointment here: "
                 f"<a href='{BOOKING_URL}' target='_blank' rel='noopener'>{BOOKING_URL}</a>"
             ),
             "type": "system"
         })
 
-    # Contact shortcuts
     if any(w in query for w in ["contact", "email", "reach", "call you", "talk to someone"]):
         return JSONResponse({
-            "answer": f"You can contact us anytime at <a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>.",
+            "answer": (
+                f"You can contact us anytime at "
+                f"<a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>."
+            ),
             "type": "system"
         })
 
-    # FAQ / RAG
+    # RAG Q&A
     qa = app.state.pipeline["qa"]
     try:
         result = qa.invoke({"query": query_raw})
-        answer = result.get("result") if isinstance(result, dict) else result
-        if not answer or len(answer.strip()) < 5:
-            answer = (
-                "I'm not completely sure about that one, "
-                f"but you can ask our staff directly here: "
-                f"<a href='{BOOKING_URL}' target='_blank'>Contact Form</a>."
-            )
+        answer = result["result"] if isinstance(result, dict) and "result" in result else result
+        if not answer or answer.strip() == "":
+            answer = "I’m not sure about that — would you like to schedule a quick call to discuss?"
         return JSONResponse({"answer": answer})
     except Exception as e:
         log.exception(f"/ask failed: {e}")
         raise HTTPException(status_code=500, detail="LLM error")
 
 
-# ---------- Lead Capture ----------
+# ---------- Lead Capture (JSON + Email via SendGrid) ----------
 @app.post("/lead")
 async def capture_lead(request: Request):
     """
-    Accepts:
-      - JSON: { name, email?, phone?, preferred_time?, message?, site? }
-      - form-encoded or multipart: same field names
+    Accepts JSON or form data:
+      { name, email?, phone?, preferred_time?, message?, site? }
+    Saves locally and emails business via SendGrid.
     """
-    data = {}
-    ctype = request.headers.get("content-type", "").lower()
     try:
+        ctype = request.headers.get("content-type", "").lower()
         if "application/json" in ctype:
             data = await request.json()
         elif "application/x-www-form-urlencoded" in ctype or "multipart/form-data" in ctype:
             form = await request.form()
             data = dict(form)
-    except Exception as e:
-        log.warning(f"/lead parse failed: {e}")
+        else:
+            try:
+                data = await request.json()
+            except Exception:
+                form = await request.form()
+                data = dict(form)
+    except Exception:
         data = {}
 
     name = (data.get("name") or "").strip()
@@ -255,27 +263,45 @@ async def capture_lead(request: Request):
         "timestamp": time.time(),
     }
 
+    # Save locally
     os.makedirs("leads", exist_ok=True)
     with open(f"leads/{int(time.time())}.json", "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
 
-    try:
-        body = (
-            "New lead captured:\n\n"
-            f"Name: {name}\n"
-            f"Email: {email}\n"
-            f"Phone: {phone}\n"
-            f"Preferred time: {preferred_time}\n"
-            f"Message: {message}\n"
-            f"Site: {site}\n"
-        )
-        msg = MIMEText(body)
-        msg["Subject"] = "New Lead - MyAiToolset"
-        msg["From"] = EMAIL_TO
-        msg["To"] = EMAIL_TO
-        with smtplib.SMTP("localhost") as s:
-            s.send_message(msg)
-    except Exception as e:
-        log.warning(f"Email notification failed (expected if SMTP not configured): {e}")
+    # SendGrid Email
+    if SENDGRID_API_KEY and EMAIL_TO:
+        try:
+            body = {
+                "personalizations": [{"to": [{"email": EMAIL_TO}]}],
+                "from": {"email": "noreply@myaitoolset.com"},
+                "subject": f"New Appointment Request from {name}",
+                "content": [{
+                    "type": "text/plain",
+                    "value": (
+                        f"New appointment request:\n\n"
+                        f"Name: {name}\n"
+                        f"Email: {email}\n"
+                        f"Phone: {phone}\n"
+                        f"Preferred time: {preferred_time}\n"
+                        f"Message: {message}\n"
+                        f"Site: {site}\n"
+                    )
+                }]
+            }
+            r = requests.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={
+                    "Authorization": f"Bearer {SENDGRID_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json=body,
+                timeout=10
+            )
+            if r.status_code not in (200, 202):
+                log.warning(f"SendGrid email failed: {r.status_code} {r.text}")
+        except Exception as e:
+            log.warning(f"SendGrid exception: {e}")
+    else:
+        log.warning("Missing SENDGRID_API_KEY or EMAIL_TO; skipping email")
 
     return JSONResponse({"ok": True, "saved": True})
