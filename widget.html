@@ -29,6 +29,10 @@
       padding:12px 16px; border:none; border-radius:10px; background:#3B82F6; color:#fff; font-weight:700; font-size:16px;
       cursor:pointer;
     }
+    .quick { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+    .chip {
+      background:#0f172a; color:#fff; border:none; border-radius:999px; padding:8px 12px; font-size:14px; cursor:pointer;
+    }
     .powered-by, footer.powered { display:none !important; height:0 !important; visibility:hidden !important; }
     @supports (padding: max(0px)) {
       .chat-input { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
@@ -49,6 +53,7 @@
   <script>
     const API_BASE = location.origin;
     const ASK_URL  = API_BASE + "/ask";
+    const FORM_URL = "https://formspree.io/f/YOUR_FORM_ID"; // Replace with your Formspree link
 
     const messages = document.getElementById('messages');
     const form = document.getElementById('chat-form');
@@ -68,8 +73,19 @@
       b.textContent = text; div.appendChild(b); messages.appendChild(div); messages.scrollTop = messages.scrollHeight;
     }
 
+    function addQuickButtons(){
+      const row = document.createElement('div'); row.className = 'quick';
+      const b1 = document.createElement('button'); b1.className='chip'; b1.textContent = 'Ask a question';
+      const b2 = document.createElement('button'); b2.className='chip'; b2.textContent = 'Schedule an appointment';
+      b1.onclick = (e)=>{ e.preventDefault(); send("I have a question"); };
+      b2.onclick = (e)=>{ e.preventDefault(); window.open(FORM_URL, "_blank"); };
+      row.appendChild(b1); row.appendChild(b2);
+      messages.appendChild(row); messages.scrollTop = messages.scrollHeight;
+    }
+
     // Greeting
-    addBot("Hi there 👋 I’m your virtual assistant. How can I help you today?");
+    addBot("Hi there 👋 I’m your virtual assistant. Would you like to ask a question or schedule an appointment?");
+    addQuickButtons();
 
     async function send(text){
       if(!text) return;
@@ -83,6 +99,7 @@
         const data = await res.json();
         let answer = data.answer || "I’m here to help!";
         addBot(answer);
+        addQuickButtons();
       } catch (e) {
         addBot("⚠️ Sorry, something went wrong. Please try again.");
       }
