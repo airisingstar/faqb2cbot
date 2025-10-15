@@ -13,9 +13,11 @@ from langchain.chains import RetrievalQA
 import os, threading, logging, platform, json, time, smtplib
 from email.mime.text import MIMEText
 
+# ---------- Logging ----------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("faqb2cbot")
 
+# ---------- Config ----------
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ALLOW_ORIGINS = os.getenv("ALLOW_ORIGINS", "*")
@@ -29,6 +31,7 @@ allow_origins_list = ["*"] if ALLOW_ORIGINS.strip() == "*" else [
     o.strip() for o in ALLOW_ORIGINS.split(",") if o.strip()
 ]
 
+# ---------- App ----------
 app = FastAPI(title="MyAiToolset Chatbot")
 
 app.add_middleware(
@@ -41,6 +44,8 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="."), name="static")
 
+
+# ---------- Routes ----------
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return HTMLResponse(
@@ -48,11 +53,16 @@ async def root():
         "<p>Try <code>/widget.html</code>, <code>/healthz</code>, or <code>/diag</code></p>"
     )
 
+@app.get("/favicon.ico")
+async def favicon():
+    return HTMLResponse(content="", status_code=204)
+
 @app.get("/widget.html", response_class=HTMLResponse)
 async def get_widget():
-    if not os.path.exists("widget.html"):
+    path = "widget.html"
+    if not os.path.exists(path):
         return PlainTextResponse("widget.html not found", status_code=404)
-    return FileResponse("widget.html")
+    return FileResponse(path)
 
 @app.get("/healthz")
 async def healthz():
@@ -86,12 +96,14 @@ async def diag():
     }
     return JSONResponse(info)
 
+
 # ---------- Lazy pipeline ----------
 app.state.ready = False
 app.state.pipeline = None
 app.state.lock = threading.Lock()
 
 def build_or_load_pipeline():
+    """Builds or reloads FAISS index. Auto-rebuilds if faq.txt is newer than existing index."""
     log.info("Pipeline init: starting")
     try:
         if not OPENAI_API_KEY:
@@ -101,20 +113,18 @@ def build_or_load_pipeline():
         embeddings = OpenAIEmbeddings()
         vectorstore = None
 
+        rebuild = True
         if os.path.isdir(INDEX_DIR):
             try:
-                vectorstore = FAISS.load_local(
-                    INDEX_DIR, embeddings, allow_dangerous_deserialization=True
-                )
-                log.info("Loaded FAISS index from disk")
-            except Exception as e:
-                log.warning(f"Failed loading FAISS: {e}")
-                vectorstore = None
+                idx_time = os.path.getmtime(INDEX_DIR)
+                faq_time = os.path.getmtime(FAQ_FILE)
+                if idx_time > faq_time:
+                    rebuild = False
+            except Exception:
+                rebuild = True
 
-        if vectorstore is None:
-            if not os.path.exists(FAQ_FILE):
-                raise FileNotFoundError(f"{FAQ_FILE} not found")
-            log.info("Building FAISS from faq.txt")
+        if rebuild:
+            log.info("Rebuilding FAISS index from faq.txt")
             loader = TextLoader(FAQ_FILE, encoding="utf-8")
             docs = loader.load()
             splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
@@ -123,6 +133,11 @@ def build_or_load_pipeline():
             os.makedirs(INDEX_DIR, exist_ok=True)
             vectorstore.save_local(INDEX_DIR)
             log.info(f"Saved FAISS index to {INDEX_DIR}")
+        else:
+            log.info("FAQ unchanged — loading existing FAISS index")
+            vectorstore = FAISS.load_local(
+                INDEX_DIR, embeddings, allow_dangerous_deserialization=True
+            )
 
         llm = ChatOpenAI(temperature=0, model=OPENAI_MODEL)
         qa = RetrievalQA.from_chain_type(
@@ -134,10 +149,12 @@ def build_or_load_pipeline():
         app.state.pipeline = {"qa": qa}
         app.state.ready = True
         log.info("Pipeline init: success; ready=True")
+
     except Exception as e:
         log.exception(f"Pipeline init failed: {e}")
         app.state.ready = False
         app.state.pipeline = None
+
 
 def ensure_pipeline():
     if app.state.pipeline is None:
@@ -149,9 +166,11 @@ def ensure_pipeline():
 def warm_in_background():
     threading.Thread(target=build_or_load_pipeline, daemon=True).start()
 
+
 # ---------- API ----------
 class Question(BaseModel):
     question: str
+
 
 @app.post("/ask")
 async def ask(q: Question):
@@ -162,7 +181,7 @@ async def ask(q: Question):
     query_raw = (q.question or "").strip()
     query = query_raw.lower()
 
-    # Booking or appointment detection
+    # Appointment / booking shortcuts
     if any(w in query for w in ["book", "appointment", "schedule", "consult", "reserve"]):
         return JSONResponse({
             "answer": (
@@ -172,20 +191,91 @@ async def ask(q: Question):
             "type": "system"
         })
 
-    # Contact
+    # Contact shortcuts
     if any(w in query for w in ["contact", "email", "reach", "call you", "talk to someone"]):
         return JSONResponse({
             "answer": f"You can contact us anytime at <a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>.",
             "type": "system"
         })
 
-    # Fallback: RAG pipeline
+    # FAQ / RAG
     qa = app.state.pipeline["qa"]
     try:
         result = qa.invoke({"query": query_raw})
         answer = result.get("result") if isinstance(result, dict) else result
-        return JSONResponse({"answer": answer or "I'm not sure, but I can find out!"})
+        if not answer or len(answer.strip()) < 5:
+            answer = (
+                "I'm not completely sure about that one, "
+                f"but you can ask our staff directly here: "
+                f"<a href='{BOOKING_URL}' target='_blank'>Contact Form</a>."
+            )
+        return JSONResponse({"answer": answer})
     except Exception as e:
         log.exception(f"/ask failed: {e}")
         raise HTTPException(status_code=500, detail="LLM error")
 
+
+# ---------- Lead Capture ----------
+@app.post("/lead")
+async def capture_lead(request: Request):
+    """
+    Accepts:
+      - JSON: { name, email?, phone?, preferred_time?, message?, site? }
+      - form-encoded or multipart: same field names
+    """
+    data = {}
+    ctype = request.headers.get("content-type", "").lower()
+    try:
+        if "application/json" in ctype:
+            data = await request.json()
+        elif "application/x-www-form-urlencoded" in ctype or "multipart/form-data" in ctype:
+            form = await request.form()
+            data = dict(form)
+    except Exception as e:
+        log.warning(f"/lead parse failed: {e}")
+        data = {}
+
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    phone = (data.get("phone") or "").strip()
+    preferred_time = (data.get("preferred_time") or "").strip()
+    message = (data.get("message") or "").strip()
+    site = (data.get("site") or "").strip()
+
+    if not name:
+        return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
+
+    payload = {
+        "name": name,
+        "email": email,
+        "phone": phone,
+        "preferred_time": preferred_time,
+        "message": message,
+        "site": site,
+        "timestamp": time.time(),
+    }
+
+    os.makedirs("leads", exist_ok=True)
+    with open(f"leads/{int(time.time())}.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+    try:
+        body = (
+            "New lead captured:\n\n"
+            f"Name: {name}\n"
+            f"Email: {email}\n"
+            f"Phone: {phone}\n"
+            f"Preferred time: {preferred_time}\n"
+            f"Message: {message}\n"
+            f"Site: {site}\n"
+        )
+        msg = MIMEText(body)
+        msg["Subject"] = "New Lead - MyAiToolset"
+        msg["From"] = EMAIL_TO
+        msg["To"] = EMAIL_TO
+        with smtplib.SMTP("localhost") as s:
+            s.send_message(msg)
+    except Exception as e:
+        log.warning(f"Email notification failed (expected if SMTP not configured): {e}")
+
+    return JSONResponse({"ok": True, "saved": True})
