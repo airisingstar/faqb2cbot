@@ -13,25 +13,22 @@ from langchain.chains import RetrievalQA
 import os, threading, logging, platform, json, time, smtplib
 from email.mime.text import MIMEText
 
-# ---------- Logging ----------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("faqb2cbot")
 
-# ---------- Config ----------
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ALLOW_ORIGINS = os.getenv("ALLOW_ORIGINS", "*")
 INDEX_DIR = os.getenv("INDEX_DIR", "faiss_index")
 FAQ_FILE = os.getenv("FAQ_FILE", "faq.txt")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-BOOKING_URL = os.getenv("BOOKING_URL", "https://calendly.com/myaitoolset/15min")
+BOOKING_URL = os.getenv("BOOKING_URL", "https://formspree.io/f/your_form_id")  # your Formspree link
 EMAIL_TO = os.getenv("EMAIL_TO", "info@myaitoolset.com")
 
 allow_origins_list = ["*"] if ALLOW_ORIGINS.strip() == "*" else [
     o.strip() for o in ALLOW_ORIGINS.split(",") if o.strip()
 ]
 
-# ---------- App ----------
 app = FastAPI(title="MyAiToolset Chatbot")
 
 app.add_middleware(
@@ -42,7 +39,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# serve widget.html and any assets from repo root
 app.mount("/static", StaticFiles(directory="."), name="static")
 
 @app.get("/", response_class=HTMLResponse)
@@ -52,16 +48,11 @@ async def root():
         "<p>Try <code>/widget.html</code>, <code>/healthz</code>, or <code>/diag</code></p>"
     )
 
-@app.get("/favicon.ico")
-async def favicon():
-    return HTMLResponse(content="", status_code=204)
-
 @app.get("/widget.html", response_class=HTMLResponse)
 async def get_widget():
-    path = "widget.html"
-    if not os.path.exists(path):
+    if not os.path.exists("widget.html"):
         return PlainTextResponse("widget.html not found", status_code=404)
-    return FileResponse(path)
+    return FileResponse("widget.html")
 
 @app.get("/healthz")
 async def healthz():
@@ -82,7 +73,6 @@ async def diag():
             "FAQ_FILE": FAQ_FILE,
             "OPENAI_MODEL": OPENAI_MODEL,
             "OPENAI_API_KEY_set": bool(OPENAI_API_KEY),
-            "RENDER_GIT_COMMIT": os.getenv("RENDER_GIT_COMMIT", ""),
         },
         "files": {
             "faq_exists": os.path.exists(FAQ_FILE),
@@ -111,7 +101,6 @@ def build_or_load_pipeline():
         embeddings = OpenAIEmbeddings()
         vectorstore = None
 
-        # Try load existing FAISS index
         if os.path.isdir(INDEX_DIR):
             try:
                 vectorstore = FAISS.load_local(
@@ -122,7 +111,6 @@ def build_or_load_pipeline():
                 log.warning(f"Failed loading FAISS: {e}")
                 vectorstore = None
 
-        # Otherwise build from FAQ_FILE
         if vectorstore is None:
             if not os.path.exists(FAQ_FILE):
                 raise FileNotFoundError(f"{FAQ_FILE} not found")
@@ -174,107 +162,30 @@ async def ask(q: Question):
     query_raw = (q.question or "").strip()
     query = query_raw.lower()
 
-    # Booking / contact shortcuts
-    if any(w in query for w in ["book", "appointment", "schedule", "meeting"]):
+    # Booking or appointment detection
+    if any(w in query for w in ["book", "appointment", "schedule", "consult", "reserve"]):
         return JSONResponse({
             "answer": (
-                "You can easily book a call here: "
+                f"You can easily schedule an appointment here: "
                 f"<a href='{BOOKING_URL}' target='_blank' rel='noopener'>{BOOKING_URL}</a>"
             ),
             "type": "system"
         })
 
+    # Contact
     if any(w in query for w in ["contact", "email", "reach", "call you", "talk to someone"]):
         return JSONResponse({
-            "answer": (
-                "You can contact us anytime at "
-                f"<a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>."
-            ),
+            "answer": f"You can contact us anytime at <a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>.",
             "type": "system"
         })
 
-    # FAQ / RAG
+    # Fallback: RAG pipeline
     qa = app.state.pipeline["qa"]
     try:
         result = qa.invoke({"query": query_raw})
-        answer = result["result"] if isinstance(result, dict) and "result" in result else result
-        return JSONResponse({"answer": answer})
+        answer = result.get("result") if isinstance(result, dict) else result
+        return JSONResponse({"answer": answer or "I'm not sure, but I can find out!"})
     except Exception as e:
         log.exception(f"/ask failed: {e}")
         raise HTTPException(status_code=500, detail="LLM error")
 
-# ---------- Lead Capture (accept JSON or form) ----------
-@app.post("/lead")
-async def capture_lead(request: Request):
-    """
-    Accepts:
-      - JSON: { name, email?, phone?, preferred_time?, message?, site? }
-      - form-encoded or multipart: same field names
-    """
-    data = {}
-    ctype = request.headers.get("content-type", "").lower()
-    try:
-        if "application/json" in ctype:
-            data = await request.json()
-        elif "application/x-www-form-urlencoded" in ctype or "multipart/form-data" in ctype:
-            form = await request.form()
-            data = dict(form)
-        else:
-            # Try JSON then form as fallback
-            try:
-                data = await request.json()
-            except Exception:
-                try:
-                    form = await request.form()
-                    data = dict(form)
-                except Exception:
-                    data = {}
-    except Exception as e:
-        log.warning(f"/lead parse failed: {e}")
-        data = {}
-
-    name = (data.get("name") or "").strip()
-    email = (data.get("email") or "").strip()
-    phone = (data.get("phone") or "").strip()
-    preferred_time = (data.get("preferred_time") or "").strip()
-    message = (data.get("message") or "").strip()
-    site = (data.get("site") or "").strip()
-
-    if not name:
-        return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
-
-    payload = {
-        "name": name,
-        "email": email,
-        "phone": phone,
-        "preferred_time": preferred_time,
-        "message": message,
-        "site": site,
-        "timestamp": time.time(),
-    }
-
-    os.makedirs("leads", exist_ok=True)
-    with open(f"leads/{int(time.time())}.json", "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
-
-    # Best-effort email (Render won't have local SMTP unless configured)
-    try:
-        body = (
-            "New lead captured:\n\n"
-            f"Name: {name}\n"
-            f"Email: {email}\n"
-            f"Phone: {phone}\n"
-            f"Preferred time: {preferred_time}\n"
-            f"Message: {message}\n"
-            f"Site: {site}\n"
-        )
-        msg = MIMEText(body)
-        msg["Subject"] = "New Lead - MyAiToolset"
-        msg["From"] = EMAIL_TO
-        msg["To"] = EMAIL_TO
-        with smtplib.SMTP("localhost") as s:
-            s.send_message(msg)
-    except Exception as e:
-        log.warning(f"Email notification failed (expected if SMTP not configured): {e}")
-
-    return JSONResponse({"ok": True, "saved": True})

@@ -1,221 +1,92 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>MyAiToolset Widget</title>
-  <style>
-    html, body { -webkit-text-size-adjust: 100%; }
-    body {
-      margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
-      background:#fff; color:#0f172a;
-    }
-    .chat-shell { display:flex; flex-direction:column; height:100vh; box-sizing:border-box; }
-    .chat-header { padding:12px 14px; background:#0f172a; color:#fff; font-weight:700; }
-    .chat-body { flex:1; overflow:auto; padding:12px; background:#f8fafc; }
-    .msg { margin:8px 0; display:flex; gap:10px; align-items:flex-start; }
-    .bot { }
-    .bot .bubble {
-      background:#e5e7eb; color:#0f172a; padding:10px 12px; border-radius:12px; max-width:85%;
-    }
-    .user { justify-content:flex-end; }
-    .user .bubble {
-      background:#3B82F6; color:#fff; padding:10px 12px; border-radius:12px; max-width:85%;
-    }
-    .chat-input { display:flex; gap:8px; padding:12px; border-top:1px solid #e5e7eb; background:#fff; }
-    .chat-input input[type="text"]{
-      flex:1; padding:12px 14px; border:1px solid #cbd5e1; border-radius:10px; font-size:16px !important;
-    }
-    .chat-input button{
-      padding:12px 16px; border:none; border-radius:10px; background:#3B82F6; color:#fff; font-weight:700; font-size:16px !important;
-      cursor:pointer;
-    }
-    .quick { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
-    .chip {
-      background:#0f172a; color:#fff; border:none; border-radius:999px; padding:8px 12px; font-size:14px; cursor:pointer;
-    }
-    /* Hide any possible “powered by …” */
-    .powered-by, footer.powered { display:none !important; height:0 !important; visibility:hidden !important; }
-    @supports (padding: max(0px)) {
-      .chat-input { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-      .chat-header { padding-top:  max(12px, env(safe-area-inset-top)); }
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyAiToolset Widget</title>
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;background:#fff;color:#0f172a}
+  .chat-shell{display:flex;flex-direction:column;height:100vh}
+  .chat-header{padding:12px 14px;background:#0f172a;color:#fff;font-weight:700}
+  .chat-body{flex:1;overflow:auto;padding:12px;background:#f8fafc}
+  .msg{margin:8px 0;display:flex;gap:10px}
+  .bot .bubble{background:#e5e7eb;color:#0f172a;padding:10px 12px;border-radius:12px;max-width:85%}
+  .user{justify-content:flex-end}
+  .user .bubble{background:#3B82F6;color:#fff;padding:10px 12px;border-radius:12px;max-width:85%}
+  .chat-input{display:flex;gap:8px;padding:12px;border-top:1px solid #e5e7eb;background:#fff}
+  .chat-input input{flex:1;padding:12px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px}
+  .chat-input button{padding:12px 16px;border:none;border-radius:10px;background:#3B82F6;color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  .quick{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .chip{background:#0f172a;color:#fff;border:none;border-radius:999px;padding:8px 12px;font-size:14px;cursor:pointer}
+</style>
 </head>
 <body>
-  <div class="chat-shell">
-    <div class="chat-header">Virtual Assistant</div>
+<div class="chat-shell">
+  <div class="chat-header">Virtual Assistant</div>
+  <div class="chat-body" id="messages"></div>
+  <form class="chat-input" id="chat-form">
+    <input id="q" type="text" placeholder="Type your question…" autocomplete="off" />
+    <button type="submit">Send</button>
+  </form>
+</div>
 
-    <div class="chat-body" id="messages"></div>
+<script>
+const API_BASE = location.origin;
+const ASK_URL = API_BASE + "/ask";
+const messages = document.getElementById('messages');
+const form = document.getElementById('chat-form');
+const q = document.getElementById('q');
 
-    <form class="chat-input" id="chat-form">
-      <input id="q" type="text" placeholder="Type your question…" autocomplete="off" />
-      <button type="submit">Send</button>
-    </form>
-  </div>
+// --- helpers ---
+function addBot(text, html=false){
+  const div=document.createElement('div');div.className='msg bot';
+  const b=document.createElement('div');b.className='bubble';
+  if(html){b.innerHTML=text;}else{b.textContent=text;}
+  div.appendChild(b);messages.appendChild(div);messages.scrollTop=messages.scrollHeight;
+}
+function addUser(text){
+  const div=document.createElement('div');div.className='msg user';
+  const b=document.createElement('div');b.className='bubble';
+  b.textContent=text;div.appendChild(b);messages.appendChild(div);messages.scrollTop=messages.scrollHeight;
+}
+function addQuickButtons(){
+  const row=document.createElement('div');row.className='quick';
+  const ask=document.createElement('button');ask.className='chip';ask.textContent='Ask a question';
+  const sched=document.createElement('button');sched.className='chip';sched.textContent='Schedule an appointment';
+  ask.onclick=(e)=>{e.preventDefault();send("I have a question");};
+  sched.onclick=(e)=>{e.preventDefault();window.open("https://formspree.io/f/your_form_id","_blank");};
+  row.appendChild(ask);row.appendChild(sched);messages.appendChild(row);
+  messages.scrollTop=messages.scrollHeight;
+}
 
-  <script>
-    const API_BASE = location.origin;          // same host as the widget file
-    const ASK_URL  = API_BASE + "/ask";
-    const LEAD_URL = API_BASE + "/lead";
+// --- greet ---
+addBot("Hi there 👋 I'm your virtual assistant. Would you like to ask a question or schedule an appointment?");
+addQuickButtons();
 
-    const messages = document.getElementById('messages');
-    const form = document.getElementById('chat-form');
-    const q = document.getElementById('q');
+// --- send handler ---
+form.addEventListener('submit',async(e)=>{
+  e.preventDefault();
+  const text=q.value.trim();
+  q.value="";
+  if(!text)return;
+  addUser(text);
 
-    // simple state machine for booking
-    const state = {
-      mode: 'idle',                // 'idle' | 'qa' | 'booking'
-      booking: {
-        step: 0,                   // 0=name, 1=phone, 2=email, 3=preferred_time, 4=done
-        name: '', phone: '', email: '', preferred_time: ''
-      }
-    };
-
-    // Helpers
-    function addBot(text, html=false){
-      const div = document.createElement('div'); div.className = 'msg bot';
-      const b = document.createElement('div'); b.className = 'bubble';
-      if(html){ b.innerHTML = text; } else { b.textContent = text; }
-      div.appendChild(b); messages.appendChild(div); messages.scrollTop = messages.scrollHeight;
-      return div;
-    }
-    function addUser(text){
-      const div = document.createElement('div'); div.className = 'msg user';
-      const b = document.createElement('div'); b.className = 'bubble';
-      b.textContent = text; div.appendChild(b); messages.appendChild(div); messages.scrollTop = messages.scrollHeight;
-    }
-    function addQuickButtons(){
-      const row = document.createElement('div'); row.className = 'quick';
-      const b1 = document.createElement('button'); b1.className='chip'; b1.textContent = 'Ask a question';
-      const b2 = document.createElement('button'); b2.className='chip'; b2.textContent = 'Schedule an appointment';
-      b1.onclick = (e)=>{ e.preventDefault(); send("I have a question"); };
-      b2.onclick = (e)=>{ e.preventDefault(); send("I want to schedule an appointment"); };
-      row.appendChild(b1); row.appendChild(b2);
-      messages.appendChild(row); messages.scrollTop = messages.scrollHeight;
-    }
-
-    // Initial greeting
-    addBot("Hi! Do you have a question, or do you want to schedule an appointment?");
+  // direct route to booking
+  if(/\b(book|schedule|appointment)\b/i.test(text)){
+    addBot("Sure! You can schedule instantly here:<br><a href='https://formspree.io/f/your_form_id' target='_blank'>Open appointment form</a>",true);
     addQuickButtons();
+    return;
+  }
 
-    // Booking flow driver (front-end)
-    function bookingNext() {
-      const b = state.booking;
-      if (b.step === 0) {
-        addBot("What’s your full name?");
-      } else if (b.step === 1) {
-        addBot(`Thanks, ${b.name}! What’s the best phone number to reach you?`);
-      } else if (b.step === 2) {
-        addBot("Got it. What’s your email address?");
-      } else if (b.step === 3) {
-        addBot("When would you like us to call you? (e.g., Tomorrow 2–4pm)");
-      } else if (b.step === 4) {
-        // Submit to backend
-        fetch(LEAD_URL, {
-          method: "POST",
-          headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({
-            name: b.name, phone: b.phone, email: b.email, preferred_time: b.preferred_time, site: location.origin
-          })
-        }).then(()=> {
-          addBot("✅ Thanks! Your request has been sent. We’ll reach out shortly.");
-          state.mode = 'idle';
-          state.booking = {step:0,name:'',phone:'',email:'',preferred_time:''};
-        }).catch(()=>{
-          addBot("⚠️ We couldn’t submit right now. Please email info@myaitoolset.com.");
-          state.mode = 'idle';
-        });
-      }
-    }
-
-    // Name detection (simple) to say Thanks <name>!
-    function looksLikeName(s){
-      s = s.trim();
-      return /^[A-Za-z][A-Za-z\-'.]+(?:\s+[A-Za-z][A-Za-z\-'.]+){0,3}$/.test(s);
-    }
-
-    // Send message to backend or handle booking locally
-    async function send(text){
-      if(!text) return;
-      addUser(text);
-
-      // If in booking mode, capture fields locally
-      if(state.mode === 'booking'){
-        const b = state.booking;
-        if (b.step === 0) {
-          b.name = text.trim();
-          // always thank the name
-          const nameOnly = b.name.split(/\s+/).slice(0,2).join(' ');
-          addBot(`Thanks, ${nameOnly}!`);
-          b.step = 1; bookingNext(); return;
-        } else if (b.step === 1) {
-          b.phone = text.trim(); b.step = 2; bookingNext(); return;
-        } else if (b.step === 2) {
-          b.email = text.trim(); b.step = 3; bookingNext(); return;
-        } else if (b.step === 3) {
-          b.preferred_time = text.trim(); b.step = 4; bookingNext(); return;
-        }
-      }
-
-      // Otherwise consult backend for intent/QA
-      try{
-        const res = await fetch(ASK_URL, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question: text})});
-        const data = await res.json();
-
-        if (data.type === "booking_start") {
-          state.mode = 'booking';
-          state.booking.step = 0;
-          addBot("Great — let's schedule an appointment.");
-          bookingNext();
-          return;
-        }
-
-        if (data.type === "name_ack" && looksLikeName(text)) {
-          addBot(data.message);
-          // If user typed name spontaneously, push toward booking?
-          addBot("Would you like to schedule an appointment now, or do you have a question?");
-          addQuickButtons();
-          return;
-        }
-
-        if (data.type === "system") {
-          addBot(data.message);
-          addQuickButtons();
-          return;
-        }
-
-        // default QA answer
-        addBot(data.answer || "I’m here to help!");
-      }catch(e){
-        addBot("⚠️ Sorry, something went wrong. Please try again.");
-      }
-    }
-
-    form.addEventListener('submit', (e)=>{
-      e.preventDefault();
-      const text = q.value.trim();
-      q.value = "";
-      if(!text) return;
-      // Quick keyword match to jump into booking locally
-      if (/\b(book|schedule|appointment|call|consult|reserve)\b/i.test(text) && state.mode !== 'booking') {
-        state.mode = 'booking';
-        state.booking.step = 0;
-        addUser(text);
-        addBot("Great — let's schedule an appointment.");
-        bookingNext();
-        return;
-      }
-      // If they type a name first, we still “Thanks, <name>!”
-      if (looksLikeName(text)) {
-        addUser(text);
-        addBot(`Thanks, ${text.split(/\s+/).slice(0,2).join(' ')}!`);
-        addBot("Would you like to schedule an appointment now, or do you have a question?");
-        addQuickButtons();
-        return;
-      }
-      send(text);
-    });
-  </script>
+  try{
+    const res=await fetch(ASK_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:text})});
+    const data=await res.json();
+    addBot(data.answer || "I'm here to help!");
+    addQuickButtons();
+  }catch(err){
+    addBot("⚠️ Sorry, something went wrong. Please try again later.");
+  }
+});
+</script>
 </body>
 </html>

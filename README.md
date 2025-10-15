@@ -1,6 +1,6 @@
 # 🧠 AiToolset — FastAPI RAG Service (Render Deployment)
 
-**Repository:** `<YOUR_GITHUB_REPO_URL>`  
+**Repository:** `https://github.com/airisingstar/faqb2cbot/tree/main`  
 **Primary module:** `faqb2cbot_app.py`  
 **Deployed service name:** `faqb2cbot-api`  
 **Frontend domain:** [https://myaitoolset.com](https://myaitoolset.com)

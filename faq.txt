@@ -1,54 +1,98 @@
+## [DEFAULT INDUSTRY FAQ TEMPLATE]
+
+**Appointments & Hours**  
+- Can I book online or after hours?  
+  Absolutely! You can request appointments 24/7 right here in chat or through our online booking form. Same-day and next-day visits are often available.  
+- What if you’re closed right now?  
+  No problem — leave your name and phone number here and our front-desk team will call first thing in the morning.  
+
+**Insurance & Payment Options**  
+- Do you take my insurance?  
+  We accept most major PPO plans — Delta Dental, Cigna, Aetna, MetLife, Guardian, Humana, and more. We’ll confirm coverage before treatment so there are no surprises.  
+- What if I don’t have insurance?  
+  We offer flexible in-house membership and 0% interest financing up to 12 months. Ask about our $99 new-patient special.  
+
+**Promotions & Membership**  
+- Do you offer new-patient specials?  
+  Yes! Our most popular package includes cleaning, exam, and X-rays for just $99 for new patients. Whitening add-on available at a discounted rate.  
+- Do you have an in-house savings plan?  
+  We do — the Smile Protection Plan offers two cleanings, exams, and X-rays per year plus 20% off most procedures.  
+
+**Emergency Care**  
+- I chipped a tooth — can I come in today?  
+  Yes! We keep same-day emergency slots open daily. If this chat is after hours, leave your contact info and our on-call dentist will reach out right away.  
+
+**Technology & Comfort**  
+- What technology do you use?  
+  We use digital X-rays, intraoral cameras, and same-day crown milling for speed and comfort. Sedation options available for nervous patients.  
+
+**Why Choose Us**  
+- What makes your office different?  
+  We combine modern cosmetic and restorative dentistry with a family-style atmosphere — over 35 years serving local communities. Patients love our gentle care, modern tech, and flexible scheduling.  
+
+**Conversion-Prompt Examples (for chat buttons)**  
+🗓 Book Appointment  
+💳 Insurance & Financing  
+🦷 Emergency Visit  
+🌟 New-Patient Special  
+💬 Leave My Info  
+📍 Directions  
+
+---
+
+## [CLIENT-SPECIFIC INFO — REMOVE WHEN PITCHING OTHERS]
+
 **About Us**  
-St Lucie Center for Cosmetic Dentistry has served the Port St. Lucie area since 1984. We accept American Express, Cash, Check, Discover, MasterCard, and Visa :contentReference[oaicite:1]{index=1}.
+St Lucie Center for Cosmetic Dentistry has served the Port St. Lucie area since 1984. We accept American Express, Cash, Check, Discover, MasterCard, and Visa.
 
 **Locations & Contact**  
-- Port St. Lucie: 139 SW Port St. Lucie Blvd, (772) 242‑4124  
-- Fort Pierce: 2102 S 11th St, (772) 232‑7073 :contentReference[oaicite:2]{index=2}.
+- Port St. Lucie: 139 SW Port St. Lucie Blvd, (772) 242-4124  
+- Fort Pierce: 2102 S 11th St, (772) 232-7073  
 
 **General Services**  
-We offer general dentistry (exams, cleanings, fillings, crowns, extractions), cosmetic dentistry (veneers, whitening), implants, dentures, and more :contentReference[oaicite:3]{index=3}.
+We offer general dentistry (exams, cleanings, fillings, crowns, extractions), cosmetic dentistry (veneers, whitening), implants, dentures, and more.
 
 **Clear Aligners FAQ**  
 - Aligners apply gentle pressure every two weeks and work via bone remodeling.  
-- They differ from braces in that they’re removable and don't use wires :contentReference[oaicite:4]{index=4}.  
-- Not all patients qualify—some need attachments; your dentist will advise :contentReference[oaicite:5]{index=5}.
+- They differ from braces in that they’re removable and don't use wires.  
+- Not all patients qualify—some need attachments; your dentist will advise.  
 
 **Dentures FAQ**  
-- Use soaking solutions, not toothpaste—too abrasive :contentReference[oaicite:6]{index=6}.  
-- Partial/full denture care: soak regularly and handle gently :contentReference[oaicite:7]{index=7}.
+- Use soaking solutions, not toothpaste—too abrasive.  
+- Partial/full denture care: soak regularly and handle gently.  
 
 **Cracked Tooth FAQ**  
 - Symptoms: pain when biting, sensitivity hot/cold.  
-- Treatment: save with root canal + crown; requires good oral hygiene afterward :contentReference[oaicite:8]{index=8}.
+- Treatment: save with root canal + crown; requires good oral hygiene afterward.  
 
-**Dental Implants & All‑on‑4®**  
-- All‑on‑4® uses 4 implants per arch—less bone grafting and faster timeline—95%+ success :contentReference[oaicite:9]{index=9}.  
-- Implants are durable, may last lifelong with proper care; prosthetic teeth last ~10–15 years :contentReference[oaicite:10]{index=10}.
+**Dental Implants & All-on-4®**  
+- All-on-4® uses 4 implants per arch—less bone grafting and faster timeline—95%+ success.  
+- Implants are durable, may last lifelong with proper care; prosthetic teeth last ~10–15 years.  
 
 **Cosmetic Dentistry Benefits**  
 - Enhances teeth appearance, boosts confidence, and can improve oral health.  
-- Popular options: bonding, veneers, crowns, whitening, gum reshaping :contentReference[oaicite:11]{index=11}.
+- Popular options: bonding, veneers, crowns, whitening, gum reshaping.  
 
 **Emergency Dental Care**  
-- Emergencies include knocked-out tooth, severe pain/swelling—call (772) 242‑4124 for same-day care :contentReference[oaicite:12]{index=12}.  
-- After hours: on-call dentist, 24/7 support available :contentReference[oaicite:13]{index=13}.
+- Emergencies include knocked-out tooth, severe pain/swelling—call (772) 242-4124 for same-day care.  
+- After hours: on-call dentist, 24/7 support available.  
 
 **Prescription & Health Conditions**  
-- Patients with heart valve conditions may need antibiotics before procedures to prevent infection :contentReference[oaicite:14]{index=14}.
+- Patients with heart valve conditions may need antibiotics before procedures to prevent infection.  
 
-St Lucie Center for Cosmetic Dentistry Services Offered
-St Lucie Center for Cosmetic Dentistry provides a wide variety of dental services and procedures to address all of our patients' dental health needs. By combining quality patient care with up-to-date technology, we are able to treat patients of all ages in a comfortable and relaxing setting. Our dentist and highly trained team are trained to not only treat patients but to identify what caused the health concern in the first place. This approach sets patients of St Lucie Center for Cosmetic Dentistry on the road to recovery and long term oral health.
+**Services Offered**  
+St Lucie Center for Cosmetic Dentistry provides a wide variety of dental services and procedures to address all of our patients' dental health needs. By combining quality patient care with up-to-date technology, we are able to treat patients of all ages in a comfortable and relaxing setting. Our dentist and highly trained team are trained to not only treat patients but to identify what caused the health concern in the first place. This approach sets patients on the road to recovery and long-term oral health.  
 
-We offer a wide variety of services for patients throughout the Port St. Lucie Florida area. Our patients depend on Dr. Almanzar & Associates to meet all of their oral healthcare needs. Whether you need preventative care, restorative solutions or a smile makeover, we can help.
+We offer a wide variety of services for patients throughout the Port St. Lucie Florida area. Our patients depend on Dr. Almanzar & Associates to meet all of their oral healthcare needs. Whether you need preventative care, restorative solutions, or a smile makeover, we can help.  
 
-Cosmetic Dental Care
-Cosmetic dental care involves enhancing the appearance of one's teeth, which will also benefit one's oral health in the process. We can enhance the brightness, shape, and size of one's teeth. We can also use cosmetic dentistry to straighten one's teeth and repair damage, which can include replacing missing teeth. Our cosmetic dental treatments will not hinder the functionality of your teeth and will allow you to continue life as normal. If you are interested in enhancing your smile, do not hesitate to give us a call and schedule an appointment. We will go over the possible options and customize your smile to what you want.
+**Cosmetic Dental Care**  
+Cosmetic dental care involves enhancing the appearance of one's teeth, which will also benefit one's oral health in the process. We can enhance the brightness, shape, and size of one's teeth. We can also use cosmetic dentistry to straighten one's teeth and repair damage, which can include replacing missing teeth. Our cosmetic dental treatments will not hinder the functionality of your teeth and will allow you to continue life as normal. If you are interested in enhancing your smile, do not hesitate to give us a call and schedule an appointment. We will go over the possible options and customize your smile to what you want.  
 
-Dental Procedures
-Our dental procedures involve treating the patient's oral health in a professional and efficient manner. Our dental procedures range from simple cleanings to more serious oral health treatments. Adult teeth are not invincible and can sustain permanent damage that does not go away with brushing or flossing. Our dental procedures can help to restore, replace or repair teeth to the best condition possible. By scheduling an appointment, we will be able to help treat any pain your experience with your teeth and help to brighten your smile.
+**Dental Procedures**  
+Our dental procedures involve treating the patient's oral health in a professional and efficient manner. Our dental procedures range from simple cleanings to more serious oral health treatments. Adult teeth are not invincible and can sustain permanent damage that does not go away with brushing or flossing. Our dental procedures can help to restore, replace or repair teeth to the best condition possible. By scheduling an appointment, we will be able to help treat any pain your experience with your teeth and help to brighten your smile.  
 
-Dental Services
-Our dental services range from the simple checkup to a deep cleaning of the gums. When a patient arrives for a checkup, we will examine the teeth and determine if there are any oral health risks. Once we have a clear idea of the patient's teeth, we will recommend the most effective treatment method. At a regular appointment, we will conduct a cleaning of the teeth, gums, and mouth, to ensure that the patient is in good oral health. We will answer any questions the patient has before the procedure if the patient has any worries.
+**Dental Services**  
+Our dental services range from the simple checkup to a deep cleaning of the gums. When a patient arrives for a checkup, we will examine the teeth and determine if there are any oral health risks. Once we have a clear idea of the patient's teeth, we will recommend the most effective treatment method. At a regular appointment, we will conduct a cleaning of the teeth, gums, and mouth, to ensure that the patient is in good oral health. We will answer any questions the patient has before the procedure if the patient has any worries.  
 
-Helpful Dental Information
+**Helpful Dental Information**  
 We offer helpful dental information such as the fact that you need to floss before brushing for any real effect. While we use regular dental checkups to clean teeth, we also use them to educate patients on proper oral hygiene. It is crucial for patients to brush their teeth twice a day and at least floss once a day to keep the teeth healthy. While regular brushing and flossing can help, they are not enough to keep teeth healthy on their own. By scheduling regular dental checkups at least twice a year, we can prevent any early signs of infection or decay before they get worse. Do not hesitate to give us a call, schedule an appointment and ask us any questions about oral health before we begin the procedure.
