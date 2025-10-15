@@ -43,7 +43,7 @@ app.add_middleware(
 )
 
 # Serve widget.html and assets
-app.mount("/static", StaticFiles(directory="."), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
