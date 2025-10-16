@@ -1,117 +1,106 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>MyAiToolset Widget</title>
-  <style>
-    html, body { -webkit-text-size-adjust: 100%; }
-    body {
-      margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
-      background:#fff; color:#0f172a;
-    }
-    .chat-shell { display:flex; flex-direction:column; height:100vh; box-sizing:border-box; }
-    .chat-header { padding:12px 14px; background:#0f172a; color:#fff; font-weight:700; }
-    .chat-body { flex:1; overflow:auto; padding:12px; background:#f8fafc; }
-    .msg { margin:8px 0; display:flex; gap:10px; align-items:flex-start; }
-    .bot .bubble {
-      background:#e5e7eb; color:#0f172a; padding:10px 12px; border-radius:12px; max-width:85%;
-    }
-    .user { justify-content:flex-end; display:flex; }
-    .user .bubble {
-      background:#3B82F6; color:#fff; padding:10px 12px; border-radius:12px; max-width:85%;
-    }
-    .chat-input { display:flex; gap:8px; padding:12px; border-top:1px solid #e5e7eb; background:#fff; }
-    .chat-input input[type="text"]{
-      flex:1; padding:12px 14px; border:1px solid #cbd5e1; border-radius:10px; font-size:16px;
-    }
-    .chat-input button{
-      padding:12px 16px; border:none; border-radius:10px; background:#3B82F6; color:#fff; font-weight:700; font-size:16px;
-      cursor:pointer;
-    }
-    .quick { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
-    .chip {
-      background:#0f172a; color:#fff; border:none; border-radius:999px; padding:8px 12px; font-size:14px; cursor:pointer;
-    }
-    .powered-by, footer.powered { display:none !important; height:0 !important; visibility:hidden !important; }
-    @supports (padding: max(0px)) {
-      .chat-input { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-      .chat-header { padding-top:  max(12px, env(safe-area-inset-top)); }
-    }
-  </style>
+<meta charset="UTF-8">
+<title>MyAiToolset Chatbot</title>
+<style>
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f9fafb;
+  color: #0f172a;
+}
+#chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+#chat-header {
+  background: {{THEME_COLOR}};
+  color: #fff;
+  padding: 14px;
+  font-weight: 600;
+  text-align: center;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+#chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  background: #fff;
+}
+.message {
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  max-width: 85%;
+}
+.user { background: #e0f2fe; align-self: flex-end; margin-left: auto; }
+.bot { background: #f3f4f6; align-self: flex-start; margin-right: auto; }
+#chat-input {
+  display: flex;
+  padding: 10px;
+  background: #f1f5f9;
+  border-top: 1px solid #e2e8f0;
+}
+#chat-input input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+}
+#chat-input button {
+  margin-left: 8px;
+  background: {{THEME_COLOR}};
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+#aitoolset-brand {
+  text-align: center;
+  font-size: 12px;
+  color: #64748b;
+  padding: 6px;
+  display: none;
+}
+#aitoolset-brand a { color: {{THEME_COLOR}}; text-decoration: none; }
+</style>
 </head>
 <body>
-  <div class="chat-shell">
-    <div class="chat-header">Virtual Assistant</div>
-    <div class="chat-body" id="messages"></div>
-    <form class="chat-input" id="chat-form">
-      <input id="q" type="text" placeholder="Type your question…" autocomplete="off" />
-      <button type="submit">Send</button>
-    </form>
+<div id="chat-container">
+  <div id="chat-header">{{WELCOME_MSG}}</div>
+  <div id="chat-messages"></div>
+  <div id="chat-input">
+    <input id="msg" type="text" placeholder="Ask me anything..." />
+    <button onclick="sendMsg()">Send</button>
   </div>
+  <div id="aitoolset-brand">Powered by <a href="https://myaitoolset.com" target="_blank">MyAiToolset</a></div>
+</div>
 
-  <script>
-    const API_BASE = location.origin;
-    const ASK_URL  = API_BASE + "/ask";
-    const FORM_URL = "https://formspree.io/f/YOUR_FORM_ID"; // Replace with your Formspree link
+<script>
+const SHOW_BRANDING = {{SHOW_BRANDING}};
+if (SHOW_BRANDING) document.getElementById("aitoolset-brand").style.display = "block";
 
-    const messages = document.getElementById('messages');
-    const form = document.getElementById('chat-form');
-    const q = document.getElementById('q');
-
-    function addBot(text, html=false){
-      const div = document.createElement('div'); div.className = 'msg bot';
-      const b = document.createElement('div'); b.className = 'bubble';
-      if(html){ b.innerHTML = text; } else { b.textContent = text; }
-      div.appendChild(b); messages.appendChild(div); messages.scrollTop = messages.scrollHeight;
-      return div;
-    }
-
-    function addUser(text){
-      const div = document.createElement('div'); div.className = 'msg user';
-      const b = document.createElement('div'); b.className = 'bubble';
-      b.textContent = text; div.appendChild(b); messages.appendChild(div); messages.scrollTop = messages.scrollHeight;
-    }
-
-    function addQuickButtons(){
-      const row = document.createElement('div'); row.className = 'quick';
-      const b1 = document.createElement('button'); b1.className='chip'; b1.textContent = 'Ask a question';
-      const b2 = document.createElement('button'); b2.className='chip'; b2.textContent = 'Schedule an appointment';
-      b1.onclick = (e)=>{ e.preventDefault(); send("I have a question"); };
-      b2.onclick = (e)=>{ e.preventDefault(); window.open(FORM_URL, "_blank"); };
-      row.appendChild(b1); row.appendChild(b2);
-      messages.appendChild(row); messages.scrollTop = messages.scrollHeight;
-    }
-
-    // Greeting
-    addBot("Hi there 👋 I’m your virtual assistant. Would you like to ask a question or schedule an appointment?");
-    addQuickButtons();
-
-    async function send(text){
-      if(!text) return;
-      addUser(text);
-      try {
-        const res = await fetch(ASK_URL, {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({question: text})
-        });
-        const data = await res.json();
-        let answer = data.answer || "I’m here to help!";
-        addBot(answer);
-        addQuickButtons();
-      } catch (e) {
-        addBot("⚠️ Sorry, something went wrong. Please try again.");
-      }
-    }
-
-    form.addEventListener('submit', (e)=>{
-      e.preventDefault();
-      const text = q.value.trim();
-      q.value = "";
-      if(!text) return;
-      send(text);
-    });
-  </script>
+async function sendMsg(){
+  const input=document.getElementById("msg");
+  const text=input.value.trim();
+  if(!text)return;
+  const chat=document.getElementById("chat-messages");
+  chat.insertAdjacentHTML("beforeend",`<div class='message user'>${text}</div>`);
+  input.value="";
+  chat.scrollTop=chat.scrollHeight;
+  try{
+    const r=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:text})});
+    const d=await r.json();
+    chat.insertAdjacentHTML("beforeend",`<div class='message bot'>${d.answer}</div>`);
+    chat.scrollTop=chat.scrollHeight;
+  }catch(e){
+    chat.insertAdjacentHTML("beforeend",`<div class='message bot'>Error: ${e}</div>`);
+  }
+}
+</script>
 </body>
 </html>
