@@ -101,6 +101,14 @@ async function sendMsg(){
     chat.insertAdjacentHTML("beforeend",`<div class='message bot'>Error: ${e}</div>`);
   }
 }
+
+// ✅ Enable "Enter" key to send message
+document.getElementById("msg").addEventListener("keydown", function(e){
+  if(e.key === "Enter" && !e.shiftKey){
+    e.preventDefault();
+    sendMsg();
+  }
+});
 </script>
 </body>
 </html>
