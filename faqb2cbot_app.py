@@ -10,6 +10,8 @@ from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
 from langchain.chains import RetrievalQA
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 import os, threading, logging, platform, json, time, requests
 
 # ---------- Logging ----------
@@ -26,6 +28,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 BOOKING_URL = os.getenv("BOOKING_URL", "https://calendly.com/myaitoolset/15min")
 EMAIL_TO = os.getenv("EMAIL_TO", "info@myaitoolset.com")
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@myaitoolset.com")
 
 # Widget customization
 WELCOME_MSG = os.getenv("WELCOME_MSG", "Questions? Chat with us!")
@@ -161,6 +164,23 @@ def ensure_pipeline():
 @app.on_event("startup")
 def warm_in_background():
     threading.Thread(target=build_or_load_pipeline, daemon=True).start()
+
+# ---------- Lead Email Helper ----------
+def send_lead_email(name, email, message):
+    """Send chatbot lead via SendGrid"""
+    try:
+        content = f"Name: {name}\nEmail: {email}\nMessage:\n{message}"
+        mail = Mail(
+            from_email=EMAIL_FROM,
+            to_emails=EMAIL_TO,
+            subject=f"New Lead from {name}",
+            plain_text_content=content,
+        )
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(mail)
+        log.info(f"Lead email sent: {response.status_code}")
+    except Exception as e:
+        log.exception(f"SendGrid send failed: {e}")
 
 # ---------- API ----------
 class Question(BaseModel):
