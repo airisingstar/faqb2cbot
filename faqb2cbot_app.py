@@ -26,7 +26,7 @@ INDEX_DIR = os.getenv("INDEX_DIR", "faiss_index")
 FAQ_FILE = os.getenv("FAQ_FILE", "faq.txt")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 BOOKING_URL = os.getenv("BOOKING_URL", "https://calendly.com/myaitoolset/15min")
-EMAIL_TO = os.getenv("EMAIL_TO", "info@myaitoolset.com")
+EMAIL_TO = os.getenv("EMAIL_TO")
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@myaitoolset.com")
 
