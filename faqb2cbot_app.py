@@ -1,6 +1,6 @@
 # faqb2cbot_app.py
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, PlainTextResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -12,7 +12,7 @@ from langchain_community.document_loaders import TextLoader
 from langchain.chains import RetrievalQA
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-import os, threading, logging, platform, json, time, requests
+import os, threading, logging, platform, time
 
 # ---------- Logging ----------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -29,6 +29,7 @@ BOOKING_URL = os.getenv("BOOKING_URL", "https://calendly.com/myaitoolset/15min")
 EMAIL_TO = os.getenv("EMAIL_TO")
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@myaitoolset.com")
+PLAN_TIER = os.getenv("PLAN_TIER", "business").lower()
 
 # Widget customization
 WELCOME_MSG = os.getenv("WELCOME_MSG", "Questions? Chat with us!")
@@ -48,7 +49,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
@@ -77,10 +77,12 @@ async def get_widget():
     return HTMLResponse(html)
 
 @app.get("/healthz")
-async def healthz(): return {"ok": True, "ts": time.time()}
+async def healthz():
+    return {"ok": True, "ts": time.time()}
 
 @app.get("/readyz")
-async def readyz(): return {"ready": bool(getattr(app.state, "ready", False))}
+async def readyz():
+    return {"ready": bool(getattr(app.state, "ready", False))}
 
 @app.get("/diag")
 async def diag():
@@ -95,6 +97,7 @@ async def diag():
             "SHOW_BRANDING": SHOW_BRANDING,
             "WELCOME_MSG": WELCOME_MSG,
             "THEME_COLOR": THEME_COLOR,
+            "PLAN_TIER": PLAN_TIER,
         },
         "files": {
             "faq_exists": os.path.exists(FAQ_FILE),
@@ -166,10 +169,18 @@ def warm_in_background():
     threading.Thread(target=build_or_load_pipeline, daemon=True).start()
 
 # ---------- Lead Email Helper ----------
-def send_lead_email(name, email, message):
+def send_lead_email(name, email, phone, message):
     """Send chatbot lead via SendGrid"""
     try:
-        content = f"Name: {name}\nEmail: {email}\nMessage:\n{message}"
+        if not SENDGRID_API_KEY or not EMAIL_TO:
+            log.warning("Missing SendGrid configuration; skipping lead email.")
+            return
+        content = (
+            f"Name: {name}\n"
+            f"Email: {email}\n"
+            f"Phone: {phone}\n\n"
+            f"Message:\n{message}"
+        )
         mail = Mail(
             from_email=EMAIL_FROM,
             to_emails=EMAIL_TO,
@@ -186,22 +197,46 @@ def send_lead_email(name, email, message):
 class Question(BaseModel):
     question: str
 
+class Lead(BaseModel):
+    name: str
+    email: str
+    phone: str
+    message: str
+
+@app.post("/lead")
+async def collect_lead(lead: Lead):
+    """Collect chatbot lead and send email."""
+    send_lead_email(lead.name, lead.email, lead.phone, lead.message)
+    return {"ok": True, "msg": "Lead sent successfully"}
+
 @app.post("/ask")
 async def ask(q: Question):
     ensure_pipeline()
     if not app.state.ready:
         raise HTTPException(status_code=503, detail="Initializing, try again soon")
+
     query_raw = (q.question or "").strip().lower()
-    if any(w in query_raw for w in ["book", "appointment", "schedule", "consult"]):
-        return JSONResponse({
-            "answer": f"You can schedule your appointment here: <a href='{BOOKING_URL}' target='_blank'>{BOOKING_URL}</a>",
-            "type": "system"
-        })
-    if any(w in query_raw for w in ["contact", "email", "reach", "call you", "talk to someone"]):
-        return JSONResponse({
-            "answer": f"You can contact us anytime at <a href='mailto:{EMAIL_TO}'>{EMAIL_TO}</a>.",
-            "type": "system"
-        })
+
+    # Booking / Contact / Demo intent detection
+    booking_keywords = [
+        "book", "appointment", "schedule", "consult",
+        "quote", "demo", "pricing", "estimate",
+        "talk to human", "talk to agent", "speak to agent",
+        "contact", "email", "reach", "call you", "call", "talk to someone"
+    ]
+
+    if any(w in query_raw for w in booking_keywords):
+        if PLAN_TIER == "business":
+            return JSONResponse({
+                "answer": "If you’d like to schedule an appointment or speak to a live representative, please refer to the contact section of the website.",
+                "type": "system"
+            })
+        else:
+            return JSONResponse({
+                "answer": "Sure! I can help with that. Please provide your name, email, phone number, and a brief message so we can reach out to you.",
+                "type": "lead"
+            })
+
     qa = app.state.pipeline["qa"]
     try:
         result = qa.invoke({"query": query_raw})
