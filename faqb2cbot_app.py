@@ -1,4 +1,4 @@
-# faqb2cbot_app.py — MyAiToolset Enterprise Chatbot (Smart Lead Form Integration)
+# faqb2cbot_app.py — MyAiToolset Enterprise Chatbot (Smart Lead Form + Business Now Custom Promo)
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -32,6 +32,7 @@ EMAIL_TO = os.getenv("EMAIL_TO")
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@myaitoolset.com")
 PLAN_TIER = os.getenv("PLAN_TIER", "business").lower()
+CUSTOM_PROMO = os.getenv("CUSTOM_PROMO", "")
 WELCOME_MSG = os.getenv("WELCOME_MSG", "Questions? Chat with us!")
 THEME_COLOR = os.getenv("THEME_COLOR", "#3B82F6")
 SHOW_BRANDING = os.getenv("SHOW_BRANDING", "true").lower() == "true"
@@ -155,7 +156,7 @@ class Lead(BaseModel):
     message: str
 
 # ------------------------------------------------------
-# core/router.py — Smart Intent + Lead Extraction
+# core/router.py — Smart Intent + Lead Extraction + Business Now Customization
 # ------------------------------------------------------
 SMALLTALK = {
     "hi": "Hey there! How can I help you today?",
@@ -205,6 +206,26 @@ def has_enough_info(lead):
     return sum(1 for v in lead.values() if v.strip()) >= 2
 
 # ------------------------------------------------------
+# Business Now custom promo logic
+# ------------------------------------------------------
+def apply_custom_logic_if_enabled(user_input: str):
+    tier = PLAN_TIER.strip().lower()
+    if tier == "business now" and TIER_FEATURES[tier]["custom"]:
+        promo_text = CUSTOM_PROMO.strip()
+        if any(k in user_input.lower() for k in ["promotion", "discount", "offer", "deal", "special"]):
+            if promo_text:
+                return {"answer": promo_text, "type": "qa"}
+            else:
+                return {
+                    "answer": (
+                        "We’re currently running special offers for our valued clients! "
+                        "Share your name and email, and I’ll connect you with our team for current promotions."
+                    ),
+                    "type": "qa",
+                }
+    return None
+
+# ------------------------------------------------------
 # routes
 # ------------------------------------------------------
 @app.post("/lead")
@@ -222,7 +243,16 @@ async def ask(q: Question):
     if not user_input:
         return JSONResponse({"answer": "Could you please provide more details?"})
 
-    # Lead extraction
+    # Smalltalk
+    if user_input.lower() in SMALLTALK:
+        return JSONResponse({"answer": SMALLTALK[user_input.lower()], "type": "smalltalk"})
+
+    # Custom promo check for Business Now
+    custom = apply_custom_logic_if_enabled(user_input)
+    if custom:
+        return JSONResponse(custom)
+
+    # Lead extraction logic
     tier = PLAN_TIER.strip().lower()
     features = TIER_FEATURES.get(tier, TIER_FEATURES["business"])
     lead = extract_lead_data(user_input)
