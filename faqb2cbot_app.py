@@ -1,4 +1,4 @@
-# faqb2cbot_app.py
+# faqb2cbot_app.py  —  Enterprise-Grade Chatbot for MyAiToolset
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,7 +12,7 @@ from langchain_community.document_loaders import TextLoader
 from langchain.chains import RetrievalQA
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-import os, threading, logging, platform, time
+import os, threading, logging, platform, time, datetime, re
 
 # ---------- Logging ----------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -51,6 +51,7 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# ---------- Basic Routes ----------
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return HTMLResponse(
@@ -64,7 +65,6 @@ async def favicon():
 
 @app.get("/widget.html", response_class=HTMLResponse)
 async def get_widget():
-    """Inject environment-based variables into widget UI dynamically."""
     path = "widget.html"
     if not os.path.exists(path):
         return PlainTextResponse("widget.html not found", status_code=404)
@@ -77,12 +77,10 @@ async def get_widget():
     return HTMLResponse(html)
 
 @app.get("/healthz")
-async def healthz():
-    return {"ok": True, "ts": time.time()}
+async def healthz(): return {"ok": True, "ts": time.time()}
 
 @app.get("/readyz")
-async def readyz():
-    return {"ready": bool(getattr(app.state, "ready", False))}
+async def readyz(): return {"ready": bool(getattr(app.state, "ready", False))}
 
 @app.get("/diag")
 async def diag():
@@ -94,9 +92,6 @@ async def diag():
             "INDEX_DIR": INDEX_DIR,
             "FAQ_FILE": FAQ_FILE,
             "OPENAI_MODEL": OPENAI_MODEL,
-            "SHOW_BRANDING": SHOW_BRANDING,
-            "WELCOME_MSG": WELCOME_MSG,
-            "THEME_COLOR": THEME_COLOR,
             "PLAN_TIER": PLAN_TIER,
         },
         "files": {
@@ -104,14 +99,11 @@ async def diag():
             "index_dir_exists": os.path.isdir(INDEX_DIR),
             "widget_exists": os.path.exists("widget.html"),
         },
-        "state": {
-            "ready": bool(getattr(app.state, "ready", False)),
-            "pipeline_built": app.state.__dict__.get("pipeline") is not None,
-        }
+        "state": {"ready": bool(getattr(app.state, "ready", False))}
     }
     return JSONResponse(info)
 
-# ---------- Lazy pipeline ----------
+# ---------- Lazy Pipeline ----------
 app.state.ready = False
 app.state.pipeline = None
 app.state.lock = threading.Lock()
@@ -168,19 +160,13 @@ def ensure_pipeline():
 def warm_in_background():
     threading.Thread(target=build_or_load_pipeline, daemon=True).start()
 
-# ---------- Lead Email Helper ----------
+# ---------- SendGrid Helper ----------
 def send_lead_email(name, email, phone, message):
-    """Send chatbot lead via SendGrid"""
     try:
         if not SENDGRID_API_KEY or not EMAIL_TO:
             log.warning("Missing SendGrid configuration; skipping lead email.")
             return
-        content = (
-            f"Name: {name}\n"
-            f"Email: {email}\n"
-            f"Phone: {phone}\n\n"
-            f"Message:\n{message}"
-        )
+        content = f"Name: {name}\nEmail: {email}\nPhone: {phone}\n\nMessage:\n{message}"
         mail = Mail(
             from_email=EMAIL_FROM,
             to_emails=EMAIL_TO,
@@ -193,7 +179,7 @@ def send_lead_email(name, email, phone, message):
     except Exception as e:
         log.exception(f"SendGrid send failed: {e}")
 
-# ---------- API ----------
+# ---------- Models ----------
 class Question(BaseModel):
     question: str
 
@@ -203,9 +189,64 @@ class Lead(BaseModel):
     phone: str
     message: str
 
+# ---------- Core Logic Enhancements ----------
+SMALLTALK = {
+    "hi": "Hey there! How can I help you today?",
+    "hello": "Hello! How can I assist you?",
+    "hey": "Hi there 👋",
+    "yo": "Hey! What can I do for you?",
+    "thanks": "You're very welcome!",
+    "thank you": "You're very welcome!",
+    "bye": "Take care and have a great day!",
+    "goodbye": "Goodbye! Hope to chat again soon.",
+    "help": "Sure, I can help. What would you like to know?",
+}
+
+SYNONYM_MAP = {
+    r"\b(prices?|pricing|cost|rates?|fee|charge)\b": "pricing",
+    r"\b(hours?|time|open|close|opening|closing)\b": "hours",
+    r"\b(location|address|where|find)\b": "location",
+    r"\b(book|schedule|appointment|consult|quote|demo)\b": "appointment",
+}
+
+FALLBACK_MSG = (
+    "I’m not certain about that — but I’d be happy to connect you with our team "
+    f"or help you schedule a quick chat here: {BOOKING_URL}"
+)
+
+# ---------- Intent Router ----------
+def route_intent(query: str):
+    q = query.lower().strip()
+    # Normalize synonyms
+    for pattern, replacement in SYNONYM_MAP.items():
+        q = re.sub(pattern, replacement, q)
+
+    # Smalltalk / greetings
+    for key, resp in SMALLTALK.items():
+        if q == key or q.startswith(key + " "):
+            return {"type": "smalltalk", "answer": resp}
+
+    # Utility intents
+    if "time" in q:
+        now = datetime.datetime.now().strftime("%I:%M %p")
+        return {"type": "utility", "answer": f"The current time is {now}."}
+    if "date" in q:
+        today = datetime.datetime.now().strftime("%A, %B %d, %Y")
+        return {"type": "utility", "answer": f"Today is {today}."}
+
+    # Booking / Contact intents
+    if any(word in q for word in ["appointment", "quote", "demo", "pricing", "contact", "call", "email"]):
+        if PLAN_TIER == "business":
+            return {"type": "system", "answer": "If you’d like to schedule an appointment or speak to a live representative, please refer to the contact section of the website."}
+        else:
+            return {"type": "lead", "answer": "Sure! I can help with that. Please provide your name, email, phone number, and a brief message so we can reach out to you."}
+
+    # Default → fallback to QA
+    return {"type": "qa", "query": q}
+
+# ---------- API ----------
 @app.post("/lead")
 async def collect_lead(lead: Lead):
-    """Collect chatbot lead and send email."""
     send_lead_email(lead.name, lead.email, lead.phone, lead.message)
     return {"ok": True, "msg": "Lead sent successfully"}
 
@@ -215,35 +256,30 @@ async def ask(q: Question):
     if not app.state.ready:
         raise HTTPException(status_code=503, detail="Initializing, try again soon")
 
-    query_raw = (q.question or "").strip().lower()
+    user_input = (q.question or "").strip()
+    if not user_input:
+        return JSONResponse({"answer": "Could you please provide more details?"})
 
-    # Booking / Contact / Demo intent detection
-    booking_keywords = [
-        "book", "appointment", "schedule", "consult",
-        "quote", "demo", "pricing", "estimate",
-        "talk to human", "talk to agent", "speak to agent",
-        "contact", "email", "reach", "call you", "call", "talk to someone"
-    ]
+    # Step 1: route by intent
+    route = route_intent(user_input)
+    if route["type"] != "qa":
+        return JSONResponse({"answer": route["answer"], "type": route["type"]})
 
-    if any(w in query_raw for w in booking_keywords):
-        if PLAN_TIER == "business":
-            return JSONResponse({
-                "answer": "If you’d like to schedule an appointment or speak to a live representative, please refer to the contact section of the website.",
-                "type": "system"
-            })
-        else:
-            return JSONResponse({
-                "answer": "Sure! I can help with that. Please provide your name, email, phone number, and a brief message so we can reach out to you.",
-                "type": "lead"
-            })
-
+    # Step 2: run RetrievalQA with brand tone
     qa = app.state.pipeline["qa"]
     try:
-        result = qa.invoke({"query": query_raw})
+        system_prompt = (
+            "You are a helpful, professional virtual assistant for MyAiToolset. "
+            "Always sound confident and polite. Never say 'I don't know'. "
+            "If unsure, suggest connecting the user with our team."
+        )
+        query_payload = f"{system_prompt}\n\nUser: {route['query']}\nAssistant:"
+        result = qa.invoke({"query": query_payload})
         answer = result["result"] if isinstance(result, dict) else result
-        if not answer.strip():
-            answer = "I’m not sure about that — would you like to schedule a quick call to discuss?"
+        answer = answer.strip()
+        if not answer or "I don't know" in answer:
+            answer = FALLBACK_MSG
         return JSONResponse({"answer": answer})
     except Exception as e:
         log.exception(f"/ask failed: {e}")
-        raise HTTPException(status_code=500, detail="LLM error")
+        return JSONResponse({"answer": FALLBACK_MSG, "type": "error"})
