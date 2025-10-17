@@ -105,9 +105,12 @@ def build_or_load_pipeline():
             os.makedirs(INDEX_DIR, exist_ok=True)
             vectorstore.save_local(INDEX_DIR)
         llm = ChatOpenAI(temperature=0, model=OPENAI_MODEL)
-        qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff",
+        qa = RetrievalQA.from_chain_type(
+            llm=llm,
+            chain_type="stuff",
             retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
-            return_source_documents=False)
+            return_source_documents=False,
+        )
         app.state.pipeline = {"qa": qa}
         app.state.ready = True
     except Exception as e:
@@ -134,8 +137,12 @@ def send_lead_email(name, email, phone, message):
             log.warning("Missing SendGrid config; skipping email.")
             return
         content = f"Name: {name}\nEmail: {email}\nPhone: {phone}\n\nMessage:\n{message}"
-        mail = Mail(from_email=EMAIL_FROM, to_emails=EMAIL_TO,
-                    subject=f"New Lead from {name}", plain_text_content=content)
+        mail = Mail(
+            from_email=EMAIL_FROM,
+            to_emails=EMAIL_TO,
+            subject=f"New Lead from {name}",
+            plain_text_content=content,
+        )
         sg = SendGridAPIClient(SENDGRID_API_KEY)
         resp = sg.send(mail)
         log.info(f"Lead email response: {resp.status_code}")
@@ -198,16 +205,17 @@ async def ask(q: Question):
     # LEAD LOCK MODE for MVP + NOW
     # ------------------------------------------------------
     if features["lead"]:
-        if any(word in user_input.lower() for word in LEAD_KEYWORDS):
-            log.info(f"Lead intent detected for tier {tier}: {user_input}")
-            return JSONResponse({
-                "type": "lead_form_request",
-                "answer": (
-                    "Let's get your request started! Please confirm your contact details below "
-                    "so our team can reach out promptly."
-                ),
-                "fields": ["name", "email", "phone", "message"]
-            })
+        for word in LEAD_KEYWORDS:
+            if word in user_input.lower():
+                log.info(f"Lead intent detected for tier {tier}: {user_input}")
+                return JSONResponse({
+                    "type": "lead_form_request",
+                    "answer": (
+                        "Let's get your request started! Please confirm your contact details below "
+                        "so our team can reach out promptly."
+                    ),
+                    "fields": ["name", "email", "phone", "message"]
+                })
 
     # ------------------------------------------------------
     # Default retrieval flow
