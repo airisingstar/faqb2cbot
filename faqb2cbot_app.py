@@ -68,8 +68,13 @@ async def get_widget():
                .replace("{{SHOW_BRANDING}}", "true" if SHOW_BRANDING else "false")
     return HTMLResponse(html)
 
-@app.get("/healthz") async def healthz(): return {"ok": True, "ts": time.time()}
-@app.get("/readyz") async def readyz(): return {"ready": bool(getattr(app.state, "ready", False))}
+@app.get("/healthz")
+async def healthz():
+    return {"ok": True, "ts": time.time()}
+
+@app.get("/readyz")
+async def readyz():
+    return {"ready": bool(getattr(app.state, "ready", False))}
 
 # ------------------------------------------------------
 # core/pipeline.py — FAISS + LLM
@@ -81,14 +86,16 @@ app.state.lock = threading.Lock()
 def build_or_load_pipeline():
     try:
         if not OPENAI_API_KEY:
-            log.warning("OPENAI_API_KEY missing; skipping pipeline init."); return
+            log.warning("OPENAI_API_KEY missing; skipping pipeline init.")
+            return
         embeddings = OpenAIEmbeddings()
         vectorstore = None
         if os.path.isdir(INDEX_DIR):
             try:
                 vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
                 log.info("Loaded FAISS index")
-            except Exception as e: log.warning(f"FAISS load failed: {e}")
+            except Exception as e:
+                log.warning(f"FAISS load failed: {e}")
         if vectorstore is None:
             loader = TextLoader(FAQ_FILE, encoding="utf-8")
             docs = loader.load()
@@ -114,7 +121,9 @@ def ensure_pipeline():
             if app.state.pipeline is None:
                 build_or_load_pipeline()
 
-@app.on_event("startup") def warm_bg(): threading.Thread(target=build_or_load_pipeline, daemon=True).start()
+@app.on_event("startup")
+def warm_bg():
+    threading.Thread(target=build_or_load_pipeline, daemon=True).start()
 
 # ------------------------------------------------------
 # core/emailer.py
@@ -122,59 +131,85 @@ def ensure_pipeline():
 def send_lead_email(name, email, phone, message):
     try:
         if not SENDGRID_API_KEY or not EMAIL_TO:
-            log.warning("Missing SendGrid config; skipping email."); return
+            log.warning("Missing SendGrid config; skipping email.")
+            return
         content = f"Name: {name}\nEmail: {email}\nPhone: {phone}\n\nMessage:\n{message}"
         mail = Mail(from_email=EMAIL_FROM, to_emails=EMAIL_TO,
                     subject=f"New Lead from {name}", plain_text_content=content)
         sg = SendGridAPIClient(SENDGRID_API_KEY)
         sg.send(mail)
-    except Exception as e: log.exception(f"SendGrid send failed: {e}")
+    except Exception as e:
+        log.exception(f"SendGrid send failed: {e}")
 
 # ------------------------------------------------------
 # models/schemas.py
 # ------------------------------------------------------
-class Question(BaseModel): question: str
+class Question(BaseModel):
+    question: str
+
 class Lead(BaseModel):
-    name: str; email: str; phone: str; message: str
+    name: str
+    email: str
+    phone: str
+    message: str
 
 # ------------------------------------------------------
 # core/router.py — Dynamic Tier + Local Time
 # ------------------------------------------------------
-SMALLTALK = {"hi":"Hey there! How can I help you today?","hello":"Hello! How can I assist you?",
-             "thanks":"You're very welcome!","bye":"Take care and have a great day!"}
+SMALLTALK = {
+    "hi": "Hey there! How can I help you today?",
+    "hello": "Hello! How can I assist you?",
+    "thanks": "You're very welcome!",
+    "bye": "Take care and have a great day!"
+}
 
 SYNONYM_MAP = {
-    r"\b(prices?|pricing|cost|rates?|fee|charge)\b":"pricing",
-    r"\b(hours?|time|open|close|opening|closing)\b":"hours",
-    r"\b(location|address|where|find)\b":"location",
-    r"\b(book|schedule|appointment|consult|quote|demo)\b":"appointment"
+    r"\b(prices?|pricing|cost|rates?|fee|charge)\b": "pricing",
+    r"\b(hours?|time|open|close|opening|closing)\b": "hours",
+    r"\b(location|address|where|find)\b": "location",
+    r"\b(book|schedule|appointment|consult|quote|demo)\b": "appointment"
 }
+
 FALLBACK_MSG = f"I’m not certain about that — would you like to schedule a chat? {BOOKING_URL}"
 
 INTENT_EXAMPLES = {
-    "sales_quote":["I want a quote","how much is it","what do you charge",
-                   "send me a pricing estimate","get in touch with sales"],
-    "pricing_page":["where is the pricing section","do you have a pricing page",
-                    "can I view your plans","is there a pricing tab on website"],
-    "faq":["tell me about your services","what do you offer","general question","info about company"]
+    "sales_quote": [
+        "I want a quote", "how much is it", "what do you charge",
+        "send me a pricing estimate", "get in touch with sales"
+    ],
+    "pricing_page": [
+        "where is the pricing section", "do you have a pricing page",
+        "can I view your plans", "is there a pricing tab on website"
+    ],
+    "faq": [
+        "tell me about your services", "what do you offer",
+        "general question", "info about company"
+    ]
 }
 
 def build_intent_index():
     try:
-        emb = OpenAIEmbeddings(); texts=[]; labels=[]
-        for lbl,exs in INTENT_EXAMPLES.items():
-            for ex in exs: texts.append(ex); labels.append(lbl)
+        emb = OpenAIEmbeddings()
+        texts, labels = [], []
+        for lbl, exs in INTENT_EXAMPLES.items():
+            for ex in exs:
+                texts.append(ex)
+                labels.append(lbl)
         return FAISS.from_texts(texts, emb, metadatas=[{"intent": l} for l in labels])
-    except Exception as e: log.warning(f"Intent index build failed: {e}"); return None
+    except Exception as e:
+        log.warning(f"Intent index build failed: {e}")
+        return None
 
 app.state.intent_index = build_intent_index()
 
-def detect_intent(q:str)->str:
+def detect_intent(q: str) -> str:
     try:
-        if not app.state.intent_index: return "faq"
-        hit = app.state.intent_index.similarity_search(q,k=1)[0]
+        if not app.state.intent_index:
+            return "faq"
+        hit = app.state.intent_index.similarity_search(q, k=1)[0]
         return hit.metadata["intent"]
-    except Exception: return "faq"
+    except Exception:
+        return "faq"
 
 # --- Tier Features ---
 TIER_FEATURES = {
@@ -192,40 +227,50 @@ def get_local_time_str():
     except Exception:
         return datetime.datetime.utcnow().strftime("%I:%M %p UTC")
 
-def apply_custom_logic_if_enabled(intent,q):
+def apply_custom_logic_if_enabled(intent, q):
     tier = PLAN_TIER.strip().lower()
-    if tier=="business now" and TIER_FEATURES[tier]["custom"]:
+    if tier == "business now" and TIER_FEATURES[tier]["custom"]:
         if "promotion" in q:
-            return {"type":"qa","answer":"Our current promotion was updated today."}
+            return {"type": "qa", "answer": "Our current promotion was updated today."}
     return None
 
-def route_intent(q:str):
-    q=q.lower().strip()
-    for k,r in SMALLTALK.items():
-        if q==k or q.startswith(k+" "): return {"type":"smalltalk","answer":r}
+def route_intent(q: str):
+    q = q.lower().strip()
 
-    if "time" in q and not any(x in q for x in ["hours","open","close"]):
-        return {"type":"utility","answer":f"The current local time is {get_local_time_str()}."}
+    # Smalltalk
+    for k, r in SMALLTALK.items():
+        if q == k or q.startswith(k + " "):
+            return {"type": "smalltalk", "answer": r}
+
+    # Utility: time/date
+    if "time" in q and not any(x in q for x in ["hours", "open", "close"]):
+        return {"type": "utility", "answer": f"The current local time is {get_local_time_str()}."}
     if "date" in q:
-        return {"type":"utility","answer":f"Today is {datetime.datetime.now().strftime('%A, %B %d, %Y')}"}
+        return {"type": "utility", "answer": f"Today is {datetime.datetime.now().strftime('%A, %B %d, %Y')}"}
 
-    for pat,repl in SYNONYM_MAP.items(): q=re.sub(pat,repl,q)
+    # Normalize synonyms
+    for pat, repl in SYNONYM_MAP.items():
+        q = re.sub(pat, repl, q)
+
     intent = detect_intent(q)
-    custom = apply_custom_logic_if_enabled(intent,q)
-    if custom: return custom
+    custom = apply_custom_logic_if_enabled(intent, q)
+    if custom:
+        return custom
 
     tier = PLAN_TIER.strip().lower()
-    cfg = TIER_FEATURES.get(tier,TIER_FEATURES["business"])
+    cfg = TIER_FEATURES.get(tier, TIER_FEATURES["business"])
 
-    if intent=="sales_quote":
+    if intent == "sales_quote":
         if cfg["lead"]:
             msg = "I'd be happy to arrange a callback — please share your name, email, and phone."
-            return {"type":"lead","answer":msg}
+            return {"type": "lead", "answer": msg}
         else:
-            return {"type":"system","answer":"Our pricing details are available online — no contact form needed."}
+            return {"type": "system", "answer": "Our pricing details are available online — no contact form needed."}
 
-    if intent=="pricing_page": return {"type":"qa","query":q}
-    return {"type":"qa","query":q}
+    if intent == "pricing_page":
+        return {"type": "qa", "query": q}
+
+    return {"type": "qa", "query": q}
 
 # ------------------------------------------------------
 # routes
@@ -251,9 +296,11 @@ async def ask(q: Question):
 
     qa = app.state.pipeline["qa"]
     try:
-        system_prompt = ("You are a helpful, professional virtual assistant for MyAiToolset. "
-                         "Always sound confident and polite. Never say 'I don't know'. "
-                         "If unsure, suggest connecting the user with our team.")
+        system_prompt = (
+            "You are a helpful, professional virtual assistant for MyAiToolset. "
+            "Always sound confident and polite. Never say 'I don't know'. "
+            "If unsure, suggest connecting the user with our team."
+        )
         query_payload = f"{system_prompt}\n\nUser: {route['query']}\nAssistant:"
         result = qa.invoke({"query": query_payload})
         answer = result["result"] if isinstance(result, dict) else result
