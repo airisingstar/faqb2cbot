@@ -1,4 +1,4 @@
-# faqb2cbot_app.py — MyAiToolset Enterprise Chatbot (Lead Lock Mode for MVP + Now)
+# faqb2cbot_app.py — MyAiToolset Enterprise Chatbot (Lead Lock Mode v2)
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -106,10 +106,9 @@ def build_or_load_pipeline():
             vectorstore.save_local(INDEX_DIR)
         llm = ChatOpenAI(temperature=0, model=OPENAI_MODEL)
         qa = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
+            llm=llm, chain_type="stuff",
             retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
-            return_source_documents=False,
+            return_source_documents=False
         )
         app.state.pipeline = {"qa": qa}
         app.state.ready = True
@@ -137,12 +136,8 @@ def send_lead_email(name, email, phone, message):
             log.warning("Missing SendGrid config; skipping email.")
             return
         content = f"Name: {name}\nEmail: {email}\nPhone: {phone}\n\nMessage:\n{message}"
-        mail = Mail(
-            from_email=EMAIL_FROM,
-            to_emails=EMAIL_TO,
-            subject=f"New Lead from {name}",
-            plain_text_content=content,
-        )
+        mail = Mail(from_email=EMAIL_FROM, to_emails=EMAIL_TO,
+                    subject=f"New Lead from {name}", plain_text_content=content)
         sg = SendGridAPIClient(SENDGRID_API_KEY)
         resp = sg.send(mail)
         log.info(f"Lead email response: {resp.status_code}")
@@ -162,7 +157,7 @@ class Lead(BaseModel):
     message: str
 
 # ------------------------------------------------------
-# core/router.py — Lead Lock Mode
+# core/router.py — Lead Lock Mode v2
 # ------------------------------------------------------
 LEAD_KEYWORDS = [
     "buy", "book", "appointment", "quote", "pricing", "price", "cost", "estimate",
@@ -179,12 +174,17 @@ TIER_FEATURES = {
 
 FALLBACK_MSG = f"I’m not certain about that — would you like to schedule a chat? {BOOKING_URL}"
 
+# Lead session state
+app.state.active_lead = False
+app.state.last_lead_ts = None
+
 # ------------------------------------------------------
 # routes
 # ------------------------------------------------------
 @app.post("/lead")
 async def collect_lead(lead: Lead):
     send_lead_email(lead.name, lead.email, lead.phone, lead.message)
+    app.state.active_lead = False  # reset after send
     return {"ok": True, "msg": "Lead sent successfully"}
 
 @app.post("/ask")
@@ -197,28 +197,44 @@ async def ask(q: Question):
     if not user_input:
         return JSONResponse({"answer": "Could you please provide more details?"})
 
-    # Determine plan tier
     tier = PLAN_TIER.strip().lower()
     features = TIER_FEATURES.get(tier, TIER_FEATURES["business"])
+    msg = user_input.lower()
 
     # ------------------------------------------------------
-    # LEAD LOCK MODE for MVP + NOW
+    # 1️⃣ Lead Lock Mode: detect or maintain state
     # ------------------------------------------------------
     if features["lead"]:
-        for word in LEAD_KEYWORDS:
-            if word in user_input.lower():
-                log.info(f"Lead intent detected for tier {tier}: {user_input}")
-                return JSONResponse({
-                    "type": "lead_form_request",
-                    "answer": (
-                        "Let's get your request started! Please confirm your contact details below "
-                        "so our team can reach out promptly."
-                    ),
-                    "fields": ["name", "email", "phone", "message"]
-                })
+        # Detect new lead trigger
+        if any(word in msg for word in LEAD_KEYWORDS):
+            app.state.active_lead = True
+            app.state.last_lead_ts = time.time()
+            log.info(f"Lead intent detected and locked: {msg}")
+            return JSONResponse({
+                "type": "lead_form_request",
+                "answer": (
+                    "Let's get your request started! Please confirm your contact details below "
+                    "so our team can reach out promptly."
+                ),
+                "fields": ["name", "email", "phone", "message"]
+            })
+
+        # Maintain lock for 2 minutes after detection
+        if app.state.active_lead and (time.time() - (app.state.last_lead_ts or 0) < 120):
+            log.info(f"Continuing lead lock session: {msg}")
+            return JSONResponse({
+                "type": "lead_form_request",
+                "answer": (
+                    "Please confirm your name, email, and phone number below "
+                    "so our team can follow up promptly."
+                ),
+                "fields": ["name", "email", "phone", "message"]
+            })
+        else:
+            app.state.active_lead = False
 
     # ------------------------------------------------------
-    # Default retrieval flow
+    # 2️⃣ Default Retrieval (LLM)
     # ------------------------------------------------------
     qa = app.state.pipeline["qa"]
     try:
