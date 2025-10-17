@@ -1,4 +1,4 @@
-# faqb2cbot_app.py — MyAiToolset Enterprise Chatbot (Smart Lead Form + Business Now Custom Promo)
+# faqb2cbot_app.py — MyAiToolset Enterprise Chatbot (Lead Lock Mode for MVP + Now)
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,7 +12,7 @@ from langchain_community.document_loaders import TextLoader
 from langchain.chains import RetrievalQA
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-import os, threading, logging, platform, time, datetime, re
+import os, threading, logging, time, datetime, re
 from tzlocal import get_localzone
 
 # ------------------------------------------------------
@@ -32,7 +32,6 @@ EMAIL_TO = os.getenv("EMAIL_TO")
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@myaitoolset.com")
 PLAN_TIER = os.getenv("PLAN_TIER", "business").lower()
-CUSTOM_PROMO = os.getenv("CUSTOM_PROMO", "")
 WELCOME_MSG = os.getenv("WELCOME_MSG", "Questions? Chat with us!")
 THEME_COLOR = os.getenv("THEME_COLOR", "#3B82F6")
 SHOW_BRANDING = os.getenv("SHOW_BRANDING", "true").lower() == "true"
@@ -78,7 +77,7 @@ async def readyz():
     return {"ready": bool(getattr(app.state, "ready", False))}
 
 # ------------------------------------------------------
-# core/pipeline.py — FAISS + LLM
+# core/pipeline.py
 # ------------------------------------------------------
 app.state.ready = False
 app.state.pipeline = None
@@ -156,74 +155,22 @@ class Lead(BaseModel):
     message: str
 
 # ------------------------------------------------------
-# core/router.py — Smart Intent + Lead Extraction + Business Now Customization
+# core/router.py — Lead Lock Mode
 # ------------------------------------------------------
-SMALLTALK = {
-    "hi": "Hey there! How can I help you today?",
-    "hello": "Hello! How can I assist you?",
-    "thanks": "You're very welcome!",
-    "bye": "Take care and have a great day!"
-}
+LEAD_KEYWORDS = [
+    "buy", "book", "appointment", "quote", "pricing", "price", "cost", "estimate",
+    "talk to agent", "live agent", "speak to rep", "call", "schedule", "contact",
+    "promo", "discount", "offer", "special"
+]
 
-SYNONYM_MAP = {
-    r"\b(prices?|pricing|cost|rates?|fee|charge)\b": "pricing",
-    r"\b(hours?|time|open|close|opening|closing)\b": "hours",
-    r"\b(location|address|where|find)\b": "location",
-    r"\b(book|schedule|appointment|consult|quote|demo)\b": "appointment"
+TIER_FEATURES = {
+    "business": {"lead": False},
+    "elite": {"lead": False},
+    "mvp": {"lead": True},
+    "business now": {"lead": True},
 }
 
 FALLBACK_MSG = f"I’m not certain about that — would you like to schedule a chat? {BOOKING_URL}"
-
-TIER_FEATURES = {
-    "business": {"lead": False, "widget": False, "custom": False},
-    "elite": {"lead": False, "widget": False, "custom": False},
-    "mvp": {"lead": True, "widget": True, "custom": False},
-    "business now": {"lead": True, "widget": True, "custom": True},
-}
-
-def get_local_time_str():
-    try:
-        local_tz = get_localzone()
-        now = datetime.datetime.now(local_tz)
-        return now.strftime("%I:%M %p %Z")
-    except Exception:
-        return datetime.datetime.utcnow().strftime("%I:%M %p UTC")
-
-# ------------------------------------------------------
-# Utility: extract lead data
-# ------------------------------------------------------
-def extract_lead_data(text):
-    name = re.search(r"\b[A-Z][a-z]+(?: [A-Z][a-z]+)*\b", text)
-    email = re.search(r"[\w\.-]+@[\w\.-]+", text)
-    phone = re.search(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b", text)
-    return {
-        "name": name.group(0) if name else "",
-        "email": email.group(0) if email else "",
-        "phone": phone.group(0) if phone else ""
-    }
-
-def has_enough_info(lead):
-    return sum(1 for v in lead.values() if v.strip()) >= 2
-
-# ------------------------------------------------------
-# Business Now custom promo logic
-# ------------------------------------------------------
-def apply_custom_logic_if_enabled(user_input: str):
-    tier = PLAN_TIER.strip().lower()
-    if tier == "business now" and TIER_FEATURES[tier]["custom"]:
-        promo_text = CUSTOM_PROMO.strip()
-        if any(k in user_input.lower() for k in ["promotion", "discount", "offer", "deal", "special"]):
-            if promo_text:
-                return {"answer": promo_text, "type": "qa"}
-            else:
-                return {
-                    "answer": (
-                        "We’re currently running special offers for our valued clients! "
-                        "Share your name and email, and I’ll connect you with our team for current promotions."
-                    ),
-                    "type": "qa",
-                }
-    return None
 
 # ------------------------------------------------------
 # routes
@@ -243,32 +190,28 @@ async def ask(q: Question):
     if not user_input:
         return JSONResponse({"answer": "Could you please provide more details?"})
 
-    # Smalltalk
-    if user_input.lower() in SMALLTALK:
-        return JSONResponse({"answer": SMALLTALK[user_input.lower()], "type": "smalltalk"})
-
-    # Custom promo check for Business Now
-    custom = apply_custom_logic_if_enabled(user_input)
-    if custom:
-        return JSONResponse(custom)
-
-    # Lead extraction logic
+    # Determine plan tier
     tier = PLAN_TIER.strip().lower()
     features = TIER_FEATURES.get(tier, TIER_FEATURES["business"])
-    lead = extract_lead_data(user_input)
 
+    # ------------------------------------------------------
+    # LEAD LOCK MODE for MVP + NOW
+    # ------------------------------------------------------
     if features["lead"]:
-        if has_enough_info(lead):
-            log.info(f"Lead ready for confirmation: {lead}")
-            return JSONResponse({"type": "lead_form", "data": lead})
-        elif any(lead.values()):
-            missing = [k for k, v in lead.items() if not v]
+        if any(word in user_input.lower() for word in LEAD_KEYWORDS):
+            log.info(f"Lead intent detected for tier {tier}: {user_input}")
             return JSONResponse({
-                "type": "lead_incomplete",
-                "answer": f"Thanks! Could you please share your {' and '.join(missing)} so we can confirm your request?"
+                "type": "lead_form_request",
+                "answer": (
+                    "Let's get your request started! Please confirm your contact details below "
+                    "so our team can reach out promptly."
+                ),
+                "fields": ["name", "email", "phone", "message"]
             })
 
-    # Default QA logic
+    # ------------------------------------------------------
+    # Default retrieval flow
+    # ------------------------------------------------------
     qa = app.state.pipeline["qa"]
     try:
         system_prompt = (
