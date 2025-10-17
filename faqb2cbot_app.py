@@ -1,3 +1,4 @@
+# faqb2cbot_app.py — MyAiToolset Enterprise Chatbot (Smart Lead Form Integration)
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,7 +16,7 @@ import os, threading, logging, platform, time, datetime, re
 from tzlocal import get_localzone
 
 # ------------------------------------------------------
-# 🔧 CONFIGURATION
+# core/config.py
 # ------------------------------------------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("faqb2cbot")
@@ -40,7 +41,7 @@ allow_origins_list = ["*"] if ALLOW_ORIGINS.strip() == "*" else [
 ]
 
 # ------------------------------------------------------
-# 🚀 FASTAPI INITIALIZATION
+# app/main.py
 # ------------------------------------------------------
 app = FastAPI(title="MyAiToolset Chatbot")
 app.add_middleware(
@@ -76,7 +77,7 @@ async def readyz():
     return {"ready": bool(getattr(app.state, "ready", False))}
 
 # ------------------------------------------------------
-# 🧠 BUILD FAISS + LLM PIPELINE
+# core/pipeline.py — FAISS + LLM
 # ------------------------------------------------------
 app.state.ready = False
 app.state.pipeline = None
@@ -89,14 +90,12 @@ def build_or_load_pipeline():
             return
         embeddings = OpenAIEmbeddings()
         vectorstore = None
-
         if os.path.isdir(INDEX_DIR):
             try:
                 vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
                 log.info("Loaded FAISS index")
             except Exception as e:
                 log.warning(f"FAISS load failed: {e}")
-
         if vectorstore is None:
             loader = TextLoader(FAQ_FILE, encoding="utf-8")
             docs = loader.load()
@@ -105,15 +104,10 @@ def build_or_load_pipeline():
             vectorstore = FAISS.from_documents(chunks, embeddings)
             os.makedirs(INDEX_DIR, exist_ok=True)
             vectorstore.save_local(INDEX_DIR)
-
         llm = ChatOpenAI(temperature=0, model=OPENAI_MODEL)
-        qa = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
+        qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff",
             retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
-            return_source_documents=False
-        )
-
+            return_source_documents=False)
         app.state.pipeline = {"qa": qa}
         app.state.ready = True
     except Exception as e:
@@ -132,7 +126,7 @@ def warm_bg():
     threading.Thread(target=build_or_load_pipeline, daemon=True).start()
 
 # ------------------------------------------------------
-# 📧 EMAIL SUPPORT (SendGrid)
+# core/emailer.py
 # ------------------------------------------------------
 def send_lead_email(name, email, phone, message):
     try:
@@ -140,19 +134,16 @@ def send_lead_email(name, email, phone, message):
             log.warning("Missing SendGrid config; skipping email.")
             return
         content = f"Name: {name}\nEmail: {email}\nPhone: {phone}\n\nMessage:\n{message}"
-        mail = Mail(
-            from_email=EMAIL_FROM,
-            to_emails=EMAIL_TO,
-            subject=f"New Lead from {name}",
-            plain_text_content=content
-        )
+        mail = Mail(from_email=EMAIL_FROM, to_emails=EMAIL_TO,
+                    subject=f"New Lead from {name}", plain_text_content=content)
         sg = SendGridAPIClient(SENDGRID_API_KEY)
-        sg.send(mail)
+        resp = sg.send(mail)
+        log.info(f"Lead email response: {resp.status_code}")
     except Exception as e:
         log.exception(f"SendGrid send failed: {e}")
 
 # ------------------------------------------------------
-# 📦 SCHEMAS
+# models/schemas.py
 # ------------------------------------------------------
 class Question(BaseModel):
     question: str
@@ -164,7 +155,7 @@ class Lead(BaseModel):
     message: str
 
 # ------------------------------------------------------
-# 🧭 ROUTING LOGIC (Dynamic Tier + Local Time)
+# core/router.py — Smart Intent + Lead Extraction
 # ------------------------------------------------------
 SMALLTALK = {
     "hi": "Hey there! How can I help you today?",
@@ -182,9 +173,13 @@ SYNONYM_MAP = {
 
 FALLBACK_MSG = f"I’m not certain about that — would you like to schedule a chat? {BOOKING_URL}"
 
-# ------------------------------------------------------
-# 🕐 UTILITIES
-# ------------------------------------------------------
+TIER_FEATURES = {
+    "business": {"lead": False, "widget": False, "custom": False},
+    "elite": {"lead": False, "widget": False, "custom": False},
+    "mvp": {"lead": True, "widget": True, "custom": False},
+    "business now": {"lead": True, "widget": True, "custom": True},
+}
+
 def get_local_time_str():
     try:
         local_tz = get_localzone()
@@ -194,58 +189,23 @@ def get_local_time_str():
         return datetime.datetime.utcnow().strftime("%I:%M %p UTC")
 
 # ------------------------------------------------------
-# 🎯 ROUTE INTENT
+# Utility: extract lead data
 # ------------------------------------------------------
-def route_intent(q: str):
-    q = q.lower().strip()
+def extract_lead_data(text):
+    name = re.search(r"\b[A-Z][a-z]+(?: [A-Z][a-z]+)*\b", text)
+    email = re.search(r"[\w\.-]+@[\w\.-]+", text)
+    phone = re.search(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b", text)
+    return {
+        "name": name.group(0) if name else "",
+        "email": email.group(0) if email else "",
+        "phone": phone.group(0) if phone else ""
+    }
 
-    # 1️⃣ Smalltalk
-    for k, r in SMALLTALK.items():
-        if q == k or q.startswith(k + " "):
-            return {"type": "smalltalk", "answer": r}
-
-    # 2️⃣ Time & Date
-    if "time" in q and not any(x in q for x in ["hours", "open", "close"]):
-        return {"type": "utility", "answer": f"The current local time is {get_local_time_str()}."}
-    if "date" in q:
-        return {"type": "utility", "answer": f"Today is {datetime.datetime.now().strftime('%A, %B %d, %Y')}"}
-
-    # 3️⃣ Normalize synonyms
-    for pat, repl in SYNONYM_MAP.items():
-        q = re.sub(pat, repl, q)
-
-    # 4️⃣ Human / Live agent intent
-    if any(x in q for x in ["live person", "live agent", "human", "real person", "talk to someone", "support agent"]):
-        return {
-            "type": "system",
-            "answer": (
-                "I’m an AI assistant, but our team is happy to help! "
-                "You can reach a live representative through the contact section of the website or by email. "
-                "Would you like me to share the contact details?"
-            ),
-        }
-
-    # 5️⃣ Tier-Aware Pricing Intent
-    if any(x in q for x in ["pricing", "price", "cost", "quote", "estimate"]):
-        if PLAN_TIER in ["mvp", "business now"]:
-            custom_text = os.getenv("CUSTOM_PRICING_MSG")
-            if custom_text:
-                return {"type": "lead", "answer": custom_text}
-            return {
-                "type": "lead",
-                "answer": (
-                    "Pricing inquiries are handled personally to ensure accuracy. "
-                    "Please share your name, email, and phone so our team can send you detailed pricing information."
-                ),
-            }
-        else:
-            return {"type": "qa", "query": q}
-
-    # 6️⃣ Default → retrieval QA
-    return {"type": "qa", "query": q}
+def has_enough_info(lead):
+    return sum(1 for v in lead.values() if v.strip()) >= 2
 
 # ------------------------------------------------------
-# 🌐 ROUTES
+# routes
 # ------------------------------------------------------
 @app.post("/lead")
 async def collect_lead(lead: Lead):
@@ -262,10 +222,23 @@ async def ask(q: Question):
     if not user_input:
         return JSONResponse({"answer": "Could you please provide more details?"})
 
-    route = route_intent(user_input)
-    if route["type"] != "qa":
-        return JSONResponse({"answer": route["answer"], "type": route["type"]})
+    # Lead extraction
+    tier = PLAN_TIER.strip().lower()
+    features = TIER_FEATURES.get(tier, TIER_FEATURES["business"])
+    lead = extract_lead_data(user_input)
 
+    if features["lead"]:
+        if has_enough_info(lead):
+            log.info(f"Lead ready for confirmation: {lead}")
+            return JSONResponse({"type": "lead_form", "data": lead})
+        elif any(lead.values()):
+            missing = [k for k, v in lead.items() if not v]
+            return JSONResponse({
+                "type": "lead_incomplete",
+                "answer": f"Thanks! Could you please share your {' and '.join(missing)} so we can confirm your request?"
+            })
+
+    # Default QA logic
     qa = app.state.pipeline["qa"]
     try:
         system_prompt = (
@@ -273,12 +246,12 @@ async def ask(q: Question):
             "Always sound confident and polite. Never say 'I don't know'. "
             "If unsure, suggest connecting the user with our team."
         )
-        query_payload = f"{system_prompt}\n\nUser: {route['query']}\nAssistant:"
+        query_payload = f"{system_prompt}\n\nUser: {user_input}\nAssistant:"
         result = qa.invoke({"query": query_payload})
         answer = result["result"] if isinstance(result, dict) else result
         if not answer.strip() or "I don't know" in answer:
             answer = FALLBACK_MSG
-        return JSONResponse({"answer": answer})
+        return JSONResponse({"answer": answer, "type": "qa"})
     except Exception as e:
         log.exception(f"/ask failed: {e}")
         return JSONResponse({"answer": FALLBACK_MSG, "type": "error"})
