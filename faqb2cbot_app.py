@@ -1,5 +1,6 @@
-# faqb2cbot_app.py  — MyAiToolset Enterprise Chatbot
-# ✂️ SECTION: app/main.py  (Entrypoint)
+# faqb2cbot_app.py — MyAiToolset Enterprise Chatbot (Full Integrated Build)
+
+# Entrypoint for FastAPI chatbot. Includes semantic intent router + FAISS retrieval + SendGrid email.
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,11 +16,13 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import os, threading, logging, platform, time, datetime, re
 
-# ✂️ SECTION: core/config.py  (Environment + App Config)
+# ------------------------------------------------------
+# ✂️ SECTION: core/config.py — Configuration & Environment
+# ------------------------------------------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("faqb2cbot")
-load_dotenv()
 
+load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ALLOW_ORIGINS = os.getenv("ALLOW_ORIGINS", "*")
 INDEX_DIR = os.getenv("INDEX_DIR", "faiss_index")
@@ -38,7 +41,9 @@ allow_origins_list = ["*"] if ALLOW_ORIGINS.strip() == "*" else [
     o.strip() for o in ALLOW_ORIGINS.split(",") if o.strip()
 ]
 
-# ✂️ SECTION: app/main.py (FastAPI setup)
+# ------------------------------------------------------
+# ✂️ SECTION: app/main.py — FastAPI App Initialization
+# ------------------------------------------------------
 app = FastAPI(title="MyAiToolset Chatbot")
 app.add_middleware(
     CORSMiddleware,
@@ -49,14 +54,19 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ✂️ SECTION: routes/health.py + routes/widget.py
+# ------------------------------------------------------
+# ✂️ SECTION: routes/health.py + routes/widget.py — Routes
+# ------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return HTMLResponse("<h3>MyAiToolset Chatbot is live</h3>"
-                        "<p>Try <code>/widget.html</code>, <code>/healthz</code>, or <code>/diag</code></p>")
+    return HTMLResponse(
+        "<h3>MyAiToolset Chatbot is live</h3>"
+        "<p>Try <code>/widget.html</code>, <code>/healthz</code>, or <code>/diag</code></p>"
+    )
 
 @app.get("/favicon.ico")
-async def favicon(): return HTMLResponse(content="", status_code=204)
+async def favicon():
+    return HTMLResponse(content="", status_code=204)
 
 @app.get("/widget.html", response_class=HTMLResponse)
 async def get_widget():
@@ -70,10 +80,12 @@ async def get_widget():
     return HTMLResponse(html)
 
 @app.get("/healthz")
-async def healthz(): return {"ok": True, "ts": time.time()}
+async def healthz():
+    return {"ok": True, "ts": time.time()}
 
 @app.get("/readyz")
-async def readyz(): return {"ready": bool(getattr(app.state, "ready", False))}
+async def readyz():
+    return {"ready": bool(getattr(app.state, "ready", False))}
 
 @app.get("/diag")
 async def diag():
@@ -95,7 +107,9 @@ async def diag():
     }
     return JSONResponse(info)
 
-# ✂️ SECTION: core/pipeline.py  (FAISS + LLM Setup)
+# ------------------------------------------------------
+# ✂️ SECTION: core/pipeline.py — FAISS + LLM Pipeline
+# ------------------------------------------------------
 app.state.ready = False
 app.state.pipeline = None
 app.state.lock = threading.Lock()
@@ -106,14 +120,18 @@ def build_or_load_pipeline():
         if not OPENAI_API_KEY:
             log.warning("OPENAI_API_KEY missing; skipping pipeline init.")
             return
+
         embeddings = OpenAIEmbeddings()
         vectorstore = None
         if os.path.isdir(INDEX_DIR):
             try:
-                vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
+                vectorstore = FAISS.load_local(
+                    INDEX_DIR, embeddings, allow_dangerous_deserialization=True
+                )
                 log.info("Loaded FAISS index from disk")
             except Exception as e:
                 log.warning(f"Failed loading FAISS: {e}")
+
         if vectorstore is None:
             if not os.path.exists(FAQ_FILE):
                 raise FileNotFoundError(f"{FAQ_FILE} not found")
@@ -125,6 +143,7 @@ def build_or_load_pipeline():
             vectorstore = FAISS.from_documents(chunks, embeddings)
             os.makedirs(INDEX_DIR, exist_ok=True)
             vectorstore.save_local(INDEX_DIR)
+
         llm = ChatOpenAI(temperature=0, model=OPENAI_MODEL)
         qa = RetrievalQA.from_chain_type(
             llm=llm,
@@ -150,22 +169,30 @@ def ensure_pipeline():
 def warm_in_background():
     threading.Thread(target=build_or_load_pipeline, daemon=True).start()
 
-# ✂️ SECTION: core/emailer.py  (SendGrid Integration)
+# ------------------------------------------------------
+# ✂️ SECTION: core/emailer.py — SendGrid Lead Emails
+# ------------------------------------------------------
 def send_lead_email(name, email, phone, message):
     try:
         if not SENDGRID_API_KEY or not EMAIL_TO:
             log.warning("Missing SendGrid configuration; skipping lead email.")
             return
         content = f"Name: {name}\nEmail: {email}\nPhone: {phone}\n\nMessage:\n{message}"
-        mail = Mail(from_email=EMAIL_FROM, to_emails=EMAIL_TO,
-                    subject=f"New Lead from {name}", plain_text_content=content)
+        mail = Mail(
+            from_email=EMAIL_FROM,
+            to_emails=EMAIL_TO,
+            subject=f"New Lead from {name}",
+            plain_text_content=content,
+        )
         sg = SendGridAPIClient(SENDGRID_API_KEY)
         response = sg.send(mail)
         log.info(f"Lead email sent: {response.status_code}")
     except Exception as e:
         log.exception(f"SendGrid send failed: {e}")
 
-# ✂️ SECTION: models/schemas.py
+# ------------------------------------------------------
+# ✂️ SECTION: models/schemas.py — Pydantic Models
+# ------------------------------------------------------
 class Question(BaseModel):
     question: str
 
@@ -175,7 +202,9 @@ class Lead(BaseModel):
     phone: str
     message: str
 
-# ✂️ SECTION: core/router.py  (Intent Handling)
+# ------------------------------------------------------
+# ✂️ SECTION: core/router.py — Smart Intent Router
+# ------------------------------------------------------
 SMALLTALK = {
     "hi": "Hey there! How can I help you today?",
     "hello": "Hello! How can I assist you?",
@@ -192,27 +221,86 @@ SYNONYM_MAP = {
 
 FALLBACK_MSG = f"I’m not certain about that — but I’d be happy to connect you with our team or help you schedule a chat: {BOOKING_URL}"
 
+# --- Smart Intent Index ---
+INTENT_EXAMPLES = {
+    "sales_quote": [
+        "I want a quote", "how much is it", "what do you charge",
+        "send me a pricing estimate", "get in touch with sales"
+    ],
+    "pricing_page": [
+        "where is the pricing section", "do you have a pricing page",
+        "can I view your plans", "is there a pricing tab on website"
+    ],
+    "faq": [
+        "tell me about your services", "what do you offer",
+        "general question", "information about company"
+    ]
+}
+
+def build_intent_index():
+    try:
+        emb = OpenAIEmbeddings()
+        texts, labels = [], []
+        for label, examples in INTENT_EXAMPLES.items():
+            for ex in examples:
+                texts.append(ex)
+                labels.append(label)
+        store = FAISS.from_texts(texts, emb, metadatas=[{"intent": l} for l in labels])
+        return store
+    except Exception as e:
+        log.warning(f"Intent index build failed: {e}")
+        return None
+
+app.state.intent_index = build_intent_index()
+
+def detect_intent(user_query: str) -> str:
+    try:
+        if not app.state.intent_index:
+            return "faq"
+        hits = app.state.intent_index.similarity_search(user_query, k=1)
+        return hits[0].metadata["intent"]
+    except Exception:
+        return "faq"
+
 def route_intent(query: str):
     q = query.lower().strip()
-    for pattern, replacement in SYNONYM_MAP.items():
-        q = re.sub(pattern, replacement, q)
+
+    # 1️⃣ Check for smalltalk
     for key, resp in SMALLTALK.items():
         if q == key or q.startswith(key + " "):
             return {"type": "smalltalk", "answer": resp}
-    if "time" in q:
+
+    # 2️⃣ Utility: time/date awareness
+    if "time" in q and not any(x in q for x in ["hours", "open", "close"]):
         now = datetime.datetime.now().strftime("%I:%M %p")
         return {"type": "utility", "answer": f"The current time is {now}."}
     if "date" in q:
         today = datetime.datetime.now().strftime("%A, %B %d, %Y")
         return {"type": "utility", "answer": f"Today is {today}."}
-    if any(w in q for w in ["appointment", "quote", "demo", "pricing", "contact", "call", "email"]):
+
+    # 3️⃣ Synonym normalization
+    for pattern, replacement in SYNONYM_MAP.items():
+        q = re.sub(pattern, replacement, q)
+
+    # 4️⃣ Semantic intent detection
+    intent = detect_intent(q)
+    if intent == "sales_quote":
         if PLAN_TIER == "business":
-            return {"type": "system", "answer": "If you’d like to schedule an appointment or speak to a live representative, please refer to the contact section of the website."}
+            return {"type": "system",
+                    "answer": "I’d love to connect you with our team for a quote — please use the contact section of the website."}
         else:
-            return {"type": "lead", "answer": "Sure! I can help with that. Please provide your name, email, phone number, and a brief message so we can reach out to you."}
+            return {"type": "lead",
+                    "answer": "Sure! Please share your name, email, and phone so we can prepare your quote."}
+    elif intent == "pricing_page":
+        # treat this as a normal FAQ retrieval
+        return {"type": "qa", "query": q}
+
+    # 5️⃣ Default fallback to retrieval
     return {"type": "qa", "query": q}
 
-# ✂️ SECTION: routes/lead.py + routes/ask.py
+# ------------------------------------------------------
+# ✂️ SECTION: routes/lead.py + routes/ask.py — API Endpoints
+# ------------------------------------------------------
 @app.post("/lead")
 async def collect_lead(lead: Lead):
     send_lead_email(lead.name, lead.email, lead.phone, lead.message)
@@ -234,9 +322,11 @@ async def ask(q: Question):
 
     qa = app.state.pipeline["qa"]
     try:
-        system_prompt = ("You are a helpful, professional virtual assistant for MyAiToolset. "
-                         "Always sound confident and polite. Never say 'I don't know'. "
-                         "If unsure, suggest connecting the user with our team.")
+        system_prompt = (
+            "You are a helpful, professional virtual assistant for MyAiToolset. "
+            "Always sound confident and polite. Never say 'I don't know'. "
+            "If unsure, suggest connecting the user with our team."
+        )
         query_payload = f"{system_prompt}\n\nUser: {route['query']}\nAssistant:"
         result = qa.invoke({"query": query_payload})
         answer = result["result"] if isinstance(result, dict) else result
