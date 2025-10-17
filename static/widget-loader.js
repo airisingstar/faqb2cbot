@@ -118,8 +118,12 @@
       phone: document.getElementById("lead-phone").value.trim(),
       message: document.getElementById("lead-message").value.trim(),
     };
+    if (!payload.name || !payload.email || !payload.phone) {
+      alert("Please fill in your name, email, and phone.");
+      return;
+    }
     try {
-      const res = await fetch("https://faqbot-4how.onrender.com/lead", {
+      await fetch("https://faqbot-4how.onrender.com/lead", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify(payload),
@@ -140,7 +144,7 @@
   window.addEventListener("message", (event) => {
     if (!event.data || typeof event.data !== "object") return;
     const { type, data } = event.data;
-    if (type === "lead_form") openLeadForm(data);
+    if (type === "lead_form_request") openLeadForm(data);
   });
 
   // Responsive adjustments

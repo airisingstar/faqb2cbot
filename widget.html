@@ -99,9 +99,9 @@ async function sendMessage() {
     const data = await res.json();
 
     // handle based on type
-    if (data.type === "lead_form") {
-      appendMessage("Great! Let’s confirm your details before sending.", "bot");
-      window.parent.postMessage({ type: "lead_form", data: data.data }, "*");
+    if (data.type === "lead_form_request") {
+      appendMessage(data.answer, "bot");
+      window.parent.postMessage({ type: "lead_form_request", data: data.data || {} }, "*");
     } else if (data.type === "lead_incomplete") {
       appendMessage(data.answer, "bot");
     } else {
