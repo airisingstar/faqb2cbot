@@ -160,7 +160,7 @@ class Lead(BaseModel):
 # core/router.py — Lead Lock Mode v2
 # ------------------------------------------------------
 LEAD_KEYWORDS = [
-    "buy", "book", "appointment", "quote", "pricing", "price", "cost", "estimate",
+    "buy", "book", "appointment", "quote", "pricing", "price", "cost", "estimate", "agent",
     "talk to agent", "live agent", "speak to rep", "call", "schedule", "contact",
     "promo", "discount", "offer", "special"
 ]
@@ -232,6 +232,20 @@ async def ask(q: Question):
             })
         else:
             app.state.active_lead = False
+
+    # ------------------------------------------------------
+    # 🔸 New Tier-Aware Lead Trigger Override (Business/Elite)
+    # ------------------------------------------------------
+    lead_triggers = ["call", "phone", "agent", "live person", "speak to", "reach out", "contact"]
+    if any(word in msg for word in lead_triggers):
+        if tier in ["business", "elite"]:
+            return JSONResponse({
+                "answer": (
+                    "I don’t have any information regarding this, however please navigate "
+                    "the website’s related sections and contact section you need to reach "
+                    "out to our office directly."
+                )
+            })
 
     # ------------------------------------------------------
     # 2️⃣ Default Retrieval (LLM)
