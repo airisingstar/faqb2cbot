@@ -169,7 +169,7 @@ TIER_FEATURES = {
     "business": {"lead": False},
     "elite": {"lead": False},
     "mvp": {"lead": True},
-    "business now": {"lead": True},
+    "now": {"lead": True},
 }
 
 FALLBACK_MSG = f"I’m not certain about that — would you like to schedule a chat? {BOOKING_URL}"
