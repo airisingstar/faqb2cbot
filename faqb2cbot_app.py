@@ -236,14 +236,22 @@ async def ask(q: Question):
     # ------------------------------------------------------
     # 🔸 New Tier-Aware Lead Trigger Override (Business/Elite)
     # ------------------------------------------------------
-    lead_triggers = ["call", "phone", "agent", "live person", "speak to", "reach out", "contact"]
-    if any(word in msg for word in lead_triggers):
-        if tier in ["business", "elite"]:
+    if tier in ["business", "elite"]:
+        contact_triggers = ["call", "agent", "live person", "speak to", "reach out", "contact me", "the number"]
+        pricing_triggers = ["price", "pricing", "how much", "cost"]
+
+        if any(word in msg for word in contact_triggers):
             return JSONResponse({
                 "answer": (
-                    "I don’t have any information regarding this, however please navigate "
-                    "the website’s related sections and contact section you need to reach "
-                    "out to our office directly."
+                    "You can find details on how to reach us in the contact secion."
+                )
+            })
+
+        if any(word in msg for word in pricing_triggers):
+            return JSONResponse({
+                "answer": (
+                    "Please check this website for any information related to pricing, "
+                    "if its not available via website feel free to contact our offices."
                 )
             })
 
