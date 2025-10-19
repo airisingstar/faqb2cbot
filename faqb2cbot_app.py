@@ -237,7 +237,7 @@ async def ask(q: Question):
     # 🔸 New Tier-Aware Lead Trigger Override (Business/Elite)
     # ------------------------------------------------------
     if tier in ["business", "elite"]:
-        contact_triggers = ["call", "agent", "live person", "speak to", "reach out", "contact me", "the number", "the phone number", "phone number"]
+        contact_triggers = ["call", "agent", "live person", "speak to", "reach out", "contact me", "the number", "the phone number", "phone number","book", "appointment"]
         pricing_triggers = ["price", "pricing", "how much", "cost"]
 
         if any(word in msg for word in contact_triggers):
