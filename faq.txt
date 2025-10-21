@@ -38,61 +38,68 @@
 💬 Leave My Info  
 📍 Directions  
 
+Q: What are your office hours?
+A: Our office is open Monday through Friday, typically from 8 AM to 5 PM. Please check our contact section for any changes or holiday hours.
+
+Q: How can I schedule a dental appointment?
+A: You can schedule an appointment by calling our office or submitting a request through our online form. We’ll confirm your visit as soon as possible.
+
+Q: Do you accept walk-ins or only scheduled visits?
+A: We recommend scheduling ahead, but we do accept walk-ins when our schedule allows. Calling before you arrive is the best way to check availability.
+
+Q: How early should I arrive before my appointment?
+A: Please arrive about 10 minutes early to allow time for check-in and paperwork.
+
+Q: What happens if I need to cancel or reschedule?
+A: We understand that things come up. Please call at least 24 hours in advance to cancel or reschedule so we can open the spot for another patient.
+
 ---
 
-## [CLIENT-SPECIFIC INFO — REMOVE WHEN PITCHING OTHERS]
+Q: Do you accept dental insurance plans?
+A: Yes, we accept most major dental insurance plans. Our front desk can help verify your coverage before treatment.
 
-**About Us**  
-St Lucie Center for Cosmetic Dentistry has served the Port St. Lucie area since 1984. We accept American Express, Cash, Check, Discover, MasterCard, and Visa.
+Q: How can I check if my insurance covers certain treatments?
+A: Bring your insurance information to your appointment or send it to us in advance. We’ll review your coverage and explain any expected costs.
 
-**Locations & Contact**  
-- Port St. Lucie: 139 SW Port St. Lucie Blvd, (772) 242-4124  
-- Fort Pierce: 2102 S 11th St, (772) 232-7073  
+Q: What payment methods do you accept?
+A: We accept cash, major credit cards, debit cards, and most HSA or FSA plans.
 
-**General Services**  
-We offer general dentistry (exams, cleanings, fillings, crowns, extractions), cosmetic dentistry (veneers, whitening), implants, dentures, and more.
+Q: Do you offer payment plans or financing options?
+A: Yes, flexible payment options are available for larger procedures. Ask our front desk team for details.
 
-**Clear Aligners FAQ**  
-- Aligners apply gentle pressure every two weeks and work via bone remodeling.  
-- They differ from braces in that they’re removable and don't use wires.  
-- Not all patients qualify—some need attachments; your dentist will advise.  
+Q: Are there additional costs for cosmetic procedures?
+A: Cosmetic services like whitening or veneers are typically not covered by insurance, but we’ll provide a detailed estimate before you begin.
 
-**Dentures FAQ**  
-- Use soaking solutions, not toothpaste—too abrasive.  
-- Partial/full denture care: soak regularly and handle gently.  
+---
 
-**Cracked Tooth FAQ**  
-- Symptoms: pain when biting, sensitivity hot/cold.  
-- Treatment: save with root canal + crown; requires good oral hygiene afterward.  
+Q: What’s the difference between a regular cleaning and deep cleaning?
+A: A regular cleaning removes surface plaque and tartar, while a deep cleaning targets buildup below the gum line to treat gum disease.
 
-**Dental Implants & All-on-4®**  
-- All-on-4® uses 4 implants per arch—less bone grafting and faster timeline—95%+ success.  
-- Implants are durable, may last lifelong with proper care; prosthetic teeth last ~10–15 years.  
+Q: How often should I schedule a dental check-up?
+A: Most patients benefit from a check-up every six months, but your dentist may recommend a different schedule based on your oral health.
 
-**Cosmetic Dentistry Benefits**  
-- Enhances teeth appearance, boosts confidence, and can improve oral health.  
-- Popular options: bonding, veneers, crowns, whitening, gum reshaping.  
+Q: What are the signs I might need a root canal?
+A: Persistent tooth pain, sensitivity to hot or cold, swelling, or discoloration can all indicate a possible infection that requires a root canal.
 
-**Emergency Dental Care**  
-- Emergencies include knocked-out tooth, severe pain/swelling—call (772) 242-4124 for same-day care.  
-- After hours: on-call dentist, 24/7 support available.  
+Q: How long do teeth whitening treatments last?
+A: Results typically last six months to two years, depending on your diet and oral hygiene habits.
 
-**Prescription & Health Conditions**  
-- Patients with heart valve conditions may need antibiotics before procedures to prevent infection.  
+Q: Do you offer pediatric dentistry for children?
+A: Yes, we treat patients of all ages, including children. Our staff is experienced in making visits comfortable and fun for kids.
 
-**Services Offered**  
-St Lucie Center for Cosmetic Dentistry provides a wide variety of dental services and procedures to address all of our patients' dental health needs. By combining quality patient care with up-to-date technology, we are able to treat patients of all ages in a comfortable and relaxing setting. Our dentist and highly trained team are trained to not only treat patients but to identify what caused the health concern in the first place. This approach sets patients on the road to recovery and long-term oral health.  
+---
 
-We offer a wide variety of services for patients throughout the Port St. Lucie Florida area. Our patients depend on Dr. Almanzar & Associates to meet all of their oral healthcare needs. Whether you need preventative care, restorative solutions, or a smile makeover, we can help.  
+Q: What should I do if I have a dental emergency after hours?
+A: If you experience severe pain, bleeding, or trauma, call our emergency line listed on our voicemail. For life-threatening emergencies, dial 911.
 
-**Cosmetic Dental Care**  
-Cosmetic dental care involves enhancing the appearance of one's teeth, which will also benefit one's oral health in the process. We can enhance the brightness, shape, and size of one's teeth. We can also use cosmetic dentistry to straighten one's teeth and repair damage, which can include replacing missing teeth. Our cosmetic dental treatments will not hinder the functionality of your teeth and will allow you to continue life as normal. If you are interested in enhancing your smile, do not hesitate to give us a call and schedule an appointment. We will go over the possible options and customize your smile to what you want.  
+Q: How do I take care of my teeth after a filling or extraction?
+A: Avoid eating until numbness wears off and stick to soft foods for the first day. Follow all instructions provided after your visit.
 
-**Dental Procedures**  
-Our dental procedures involve treating the patient's oral health in a professional and efficient manner. Our dental procedures range from simple cleanings to more serious oral health treatments. Adult teeth are not invincible and can sustain permanent damage that does not go away with brushing or flossing. Our dental procedures can help to restore, replace or repair teeth to the best condition possible. By scheduling an appointment, we will be able to help treat any pain your experience with your teeth and help to brighten your smile.  
+Q: Do you offer same-day emergency appointments?
+A: We reserve limited openings each day for emergencies. Call as early as possible for best availability.
 
-**Dental Services**  
-Our dental services range from the simple checkup to a deep cleaning of the gums. When a patient arrives for a checkup, we will examine the teeth and determine if there are any oral health risks. Once we have a clear idea of the patient's teeth, we will recommend the most effective treatment method. At a regular appointment, we will conduct a cleaning of the teeth, gums, and mouth, to ensure that the patient is in good oral health. We will answer any questions the patient has before the procedure if the patient has any worries.  
+Q: How can I relieve tooth pain before I see a dentist?
+A: Try rinsing with warm salt water, applying a cold compress, or taking over-the-counter pain relievers as directed until you’re seen.
 
-**Helpful Dental Information**  
-We offer helpful dental information such as the fact that you need to floss before brushing for any real effect. While we use regular dental checkups to clean teeth, we also use them to educate patients on proper oral hygiene. It is crucial for patients to brush their teeth twice a day and at least floss once a day to keep the teeth healthy. While regular brushing and flossing can help, they are not enough to keep teeth healthy on their own. By scheduling regular dental checkups at least twice a year, we can prevent any early signs of infection or decay before they get worse. Do not hesitate to give us a call, schedule an appointment and ask us any questions about oral health before we begin the procedure.
+Q: What steps can I take to prevent cavities and gum disease?
+A: Brush twice a day, floss daily, and visit your dentist regularly for cleanings and exams. A healthy diet also helps maintain strong teeth.
