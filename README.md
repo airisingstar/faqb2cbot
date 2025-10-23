@@ -9,7 +9,7 @@
 
 ## 🧩 Overview
 
-**AiToolset** provides a Retrieval-Augmented Generation (RAG) backend API that powers the embedded chatbot for client websites (e.g., dental offices).
+**AiToolset** provides a Retrieval-Augmented Generation (RAG) backend API that powers the embedded chatbot for websites.
 
 It combines **FastAPI + LangChain + FAISS** with **OpenAI APIs** for natural Q&A, and integrates with **WordPress** frontends and **Formspree** for contact intake.
 
