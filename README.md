@@ -254,3 +254,8 @@ Options for persistence:
 | **Secrets** | Render Env Vars |
 | **Domain** | myaitoolset.com |
 | **Primary App** | faqb2cbot_app.py |
+
+---
+
+Author: David Santana Rivera
+Updated: 10/21/2024
